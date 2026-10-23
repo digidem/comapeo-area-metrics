@@ -1,0 +1,652 @@
+{
+ "default": {
+  "extent": {
+   "area": 181670000,
+   "clusters": [
+    {
+     "records": 122,
+     "days": 28,
+     "spanM": 12128.745787544176,
+     "area": 146910000,
+     "cellCount": 14691,
+     "kept": true,
+     "centroid": [
+      20000,
+      19875.336491465525
+     ]
+    },
+    {
+     "records": 30,
+     "days": 10,
+     "spanM": 2885.326288640499,
+     "area": 11680000,
+     "cellCount": 1168,
+     "kept": true,
+     "centroid": [
+      120072.98322683707,
+      89923.3426517572
+     ]
+    },
+    {
+     "records": 14,
+     "days": 14,
+     "spanM": 12000,
+     "area": 23080000,
+     "cellCount": 2308,
+     "kept": true,
+     "centroid": [
+      40000,
+      20000
+     ]
+    },
+    {
+     "records": 12,
+     "days": 12,
+     "spanM": 186.50789018720388,
+     "area": 1150000,
+     "cellCount": 115,
+     "kept": false,
+     "centroid": [
+      19996.52810581011,
+      119996.38639584318
+     ]
+    },
+    {
+     "records": 5,
+     "days": 1,
+     "spanM": 293.07790137827396,
+     "area": 1270000,
+     "cellCount": 127,
+     "kept": false,
+     "centroid": [
+      119968.18181818182,
+      19930.127912288717
+     ]
+    },
+    {
+     "records": 1,
+     "days": 1,
+     "spanM": 0,
+     "area": 800000,
+     "cellCount": 80,
+     "kept": false,
+     "centroid": [
+      20000,
+      -80000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 556560000,
+  "footprintBuffer": 2500
+ },
+ "bigHoles": {
+  "extent": {
+   "area": 253960000,
+   "clusters": [
+    {
+     "records": 122,
+     "days": 28,
+     "spanM": 12128.745787544176,
+     "area": 133540000,
+     "cellCount": 13354,
+     "kept": true,
+     "centroid": [
+      20000,
+      19875.336491465525
+     ]
+    },
+    {
+     "records": 30,
+     "days": 10,
+     "spanM": 2885.326288640499,
+     "area": 8740000,
+     "cellCount": 874,
+     "kept": true,
+     "centroid": [
+      120072.98322683707,
+      89923.3426517572
+     ]
+    },
+    {
+     "records": 14,
+     "days": 14,
+     "spanM": 12000,
+     "area": 111680000,
+     "cellCount": 11168,
+     "kept": true,
+     "centroid": [
+      40000,
+      20000
+     ]
+    },
+    {
+     "records": 12,
+     "days": 12,
+     "spanM": 186.50789018720388,
+     "area": 390000,
+     "cellCount": 39,
+     "kept": false,
+     "centroid": [
+      19996.52810581011,
+      119996.38639584318
+     ]
+    },
+    {
+     "records": 5,
+     "days": 1,
+     "spanM": 293.07790137827396,
+     "area": 460000,
+     "cellCount": 46,
+     "kept": false,
+     "centroid": [
+      119968.18181818182,
+      19930.127912288717
+     ]
+    },
+    {
+     "records": 1,
+     "days": 1,
+     "spanM": 0,
+     "area": 240000,
+     "cellCount": 24,
+     "kept": false,
+     "centroid": [
+      20000,
+      -80000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 556560000,
+  "footprintBuffer": 2500
+ },
+ "noHoles": {
+  "extent": {
+   "area": 129640000,
+   "clusters": [
+    {
+     "records": 122,
+     "days": 28,
+     "spanM": 12128.745787544176,
+     "area": 123080000,
+     "cellCount": 3077,
+     "kept": true,
+     "centroid": [
+      19991.31088394468,
+      19872.188815393867
+     ]
+    },
+    {
+     "records": 30,
+     "days": 10,
+     "spanM": 2885.326288640499,
+     "area": 6400000,
+     "cellCount": 160,
+     "kept": true,
+     "centroid": [
+      120089.9441340782,
+      89909.09816440543
+     ]
+    },
+    {
+     "records": 14,
+     "days": 14,
+     "spanM": 12000,
+     "area": 160000,
+     "cellCount": 4,
+     "kept": true,
+     "centroid": [
+      40000,
+      20000
+     ]
+    },
+    {
+     "records": 12,
+     "days": 12,
+     "spanM": 186.50789018720388,
+     "area": 0,
+     "cellCount": 0,
+     "kept": false,
+     "centroid": [
+      20002.255639097744,
+      119995.4887218045
+     ]
+    },
+    {
+     "records": 5,
+     "days": 1,
+     "spanM": 293.07790137827396,
+     "area": 40000,
+     "cellCount": 1,
+     "kept": false,
+     "centroid": [
+      119980.51470588235,
+      19948.529411764706
+     ]
+    },
+    {
+     "records": 1,
+     "days": 1,
+     "spanM": 0,
+     "area": 0,
+     "cellCount": 0,
+     "kept": false,
+     "centroid": [
+      20000,
+      -80000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 556200000,
+  "footprintBuffer": 2500
+ },
+ "farStray": {
+  "extent": {
+   "area": 166820000,
+   "clusters": [
+    {
+     "records": 122,
+     "days": 28,
+     "spanM": 12128.745787544176,
+     "area": 140270000,
+     "cellCount": 14027,
+     "kept": true,
+     "centroid": [
+      20010.03883108478,
+      19848.616020311645
+     ]
+    },
+    {
+     "records": 30,
+     "days": 10,
+     "spanM": 2885.326288640499,
+     "area": 11150000,
+     "cellCount": 1115,
+     "kept": true,
+     "centroid": [
+      120060.98581302291,
+      89926.90069116042
+     ]
+    },
+    {
+     "records": 14,
+     "days": 14,
+     "spanM": 12000,
+     "area": 12160000,
+     "cellCount": 1216,
+     "kept": true,
+     "centroid": [
+      40000,
+      20000
+     ]
+    },
+    {
+     "records": 12,
+     "days": 12,
+     "spanM": 186.50789018720388,
+     "area": 1160000,
+     "cellCount": 116,
+     "kept": true,
+     "centroid": [
+      19997.073474470733,
+      119995.57907845579
+     ]
+    },
+    {
+     "records": 5,
+     "days": 1,
+     "spanM": 293.07790137827396,
+     "area": 1280000,
+     "cellCount": 128,
+     "kept": true,
+     "centroid": [
+      119963.80952380953,
+      19934.285714285714
+     ]
+    },
+    {
+     "records": 1,
+     "days": 1,
+     "spanM": 0,
+     "area": 800000,
+     "cellCount": 80,
+     "kept": true,
+     "centroid": [
+      20000,
+      -80000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 346830000,
+  "footprintBuffer": 1500
+ },
+ "coarse": {
+  "extent": {
+   "area": 334250000,
+   "clusters": [
+    {
+     "records": 136,
+     "days": 28,
+     "spanM": 31998.448453843594,
+     "area": 313750000,
+     "cellCount": 1255,
+     "kept": true,
+     "centroid": [
+      29025.494437577257,
+      19962.14462299135
+     ]
+    },
+    {
+     "records": 30,
+     "days": 10,
+     "spanM": 2885.326288640499,
+     "area": 20500000,
+     "cellCount": 82,
+     "kept": true,
+     "centroid": [
+      120095.14925373135,
+      89929.10447761194
+     ]
+    },
+    {
+     "records": 12,
+     "days": 12,
+     "spanM": 186.50789018720388,
+     "area": 4000000,
+     "cellCount": 16,
+     "kept": false,
+     "centroid": [
+      20000,
+      120000
+     ]
+    },
+    {
+     "records": 5,
+     "days": 1,
+     "spanM": 293.07790137827396,
+     "area": 4000000,
+     "cellCount": 16,
+     "kept": false,
+     "centroid": [
+      119958.84146341463,
+      19958.841463414636
+     ]
+    },
+    {
+     "records": 1,
+     "days": 1,
+     "spanM": 0,
+     "area": 4000000,
+     "cellCount": 16,
+     "kept": false,
+     "centroid": [
+      20000,
+      -80000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 1187000000,
+  "footprintBuffer": 5000
+ },
+ "empty": {
+  "extent": {
+   "area": 0,
+   "clusters": []
+  },
+  "footprintArea": 0,
+  "footprintBuffer": 2500
+ },
+ "territory": {
+  "extent": {
+   "area": 2456060000,
+   "clusters": [
+    {
+     "records": 3030,
+     "days": 400,
+     "spanM": 49972.42642566562,
+     "area": 2456060000,
+     "cellCount": 245606,
+     "kept": true,
+     "centroid": [
+      30046.530173049145,
+      30009.61019722296
+     ]
+    },
+    {
+     "records": 8,
+     "days": 2,
+     "spanM": 1729.8259604722261,
+     "area": 3160000,
+     "cellCount": 316,
+     "kept": false,
+     "centroid": [
+      100094.8557089084,
+      29911.229611041406
+     ]
+    }
+   ]
+  },
+  "footprintArea": 2729610000,
+  "footprintBuffer": 1500
+ },
+ "fine": {
+  "extent": {
+   "area": 2450897500,
+   "clusters": [
+    {
+     "records": 3030,
+     "days": 400,
+     "spanM": 49972.42642566562,
+     "area": 2450897500,
+     "cellCount": 980359,
+     "kept": true,
+     "centroid": [
+      30045.261777789652,
+      30008.727761047736
+     ]
+    },
+    {
+     "records": 8,
+     "days": 2,
+     "spanM": 1729.8259604722261,
+     "area": 3007500,
+     "cellCount": 1203,
+     "kept": false,
+     "centroid": [
+      100093.62268881229,
+      29912.488248198057
+     ]
+    }
+   ]
+  },
+  "footprintArea": 2729780000,
+  "footprintBuffer": 1500
+ },
+ "fig1": {
+  "extent": {
+   "area": 1.2152,
+   "clusters": [
+    {
+     "records": 20,
+     "days": 1,
+     "spanM": 3.8,
+     "area": 0.7104,
+     "cellCount": 1776,
+     "kept": true,
+     "centroid": [
+      -0.7085101693848013,
+      -1.1003658716453601e-17
+     ]
+    },
+    {
+     "records": 16,
+     "days": 1,
+     "spanM": 3.15,
+     "area": 0.5048,
+     "cellCount": 1262,
+     "kept": true,
+     "centroid": [
+      4.44593670886076,
+      4.965554456129392e-18
+     ]
+    }
+   ]
+  },
+  "footprintArea": 24.0808,
+  "footprintBuffer": 0.75
+ },
+ "fig3": {
+  "extent": {
+   "area": 5.1983999999999995,
+   "clusters": [
+    {
+     "records": 20,
+     "days": 1,
+     "spanM": 3.8,
+     "area": 2.9224,
+     "cellCount": 7306,
+     "kept": true,
+     "centroid": [
+      -0.7085101693848013,
+      -1.1003658716453601e-17
+     ]
+    },
+    {
+     "records": 16,
+     "days": 1,
+     "spanM": 3.15,
+     "area": 2.276,
+     "cellCount": 5690,
+     "kept": true,
+     "centroid": [
+      4.44593670886076,
+      4.965554456129392e-18
+     ]
+    }
+   ]
+  },
+  "footprintArea": 24.0808,
+  "footprintBuffer": 0.75
+ },
+ "fig4": {
+  "extent": {
+   "area": 7.492800000000001,
+   "clusters": [
+    {
+     "records": 20,
+     "days": 1,
+     "spanM": 3.8,
+     "area": 5.216800000000001,
+     "cellCount": 13042,
+     "kept": true,
+     "centroid": [
+      -0.6970110883974496,
+      -1.0825069942142082e-17
+     ]
+    },
+    {
+     "records": 16,
+     "days": 1,
+     "spanM": 3.15,
+     "area": 2.276,
+     "cellCount": 5690,
+     "kept": true,
+     "centroid": [
+      4.44593670886076,
+      4.965554456129392e-18
+     ]
+    }
+   ]
+  },
+  "footprintArea": 24.0808,
+  "footprintBuffer": 0.75
+ },
+ "loopThin": {
+  "extent": {
+   "area": 398840000,
+   "clusters": [
+    {
+     "records": 58,
+     "days": 1,
+     "spanM": 50000,
+     "area": 398840000,
+     "cellCount": 39884,
+     "kept": true,
+     "centroid": [
+      75000,
+      53500.55552126412
+     ]
+    }
+   ]
+  },
+  "footprintArea": 552280000,
+  "footprintBuffer": 2500
+ },
+ "loopSquare": {
+  "extent": {
+   "area": 434400000,
+   "clusters": [
+    {
+     "records": 40,
+     "days": 1,
+     "spanM": 20000,
+     "area": 434400000,
+     "cellCount": 43440,
+     "kept": true,
+     "centroid": [
+      60000,
+      60000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 386120000,
+  "footprintBuffer": 2500
+ },
+ "loopInside": {
+  "extent": {
+   "area": 398840000,
+   "clusters": [
+    {
+     "records": 59,
+     "days": 2,
+     "spanM": 50000,
+     "area": 398840000,
+     "cellCount": 39884,
+     "kept": true,
+     "centroid": [
+      75000,
+      53500.55552126412
+     ]
+    }
+   ]
+  },
+  "footprintArea": 562680000,
+  "footprintBuffer": 2500
+ },
+ "loopFilled": {
+  "extent": {
+   "area": 226000000,
+   "clusters": [
+    {
+     "records": 30,
+     "days": 1,
+     "spanM": 20000,
+     "area": 226000000,
+     "cellCount": 22600,
+     "kept": true,
+     "centroid": [
+      60000,
+      55000
+     ]
+    }
+   ]
+  },
+  "footprintArea": 288520000,
+  "footprintBuffer": 2500
+ }
+}

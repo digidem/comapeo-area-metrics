@@ -1,0 +1,626 @@
+<!doctype html>
+<notebook theme="air">
+  <title>CoMapeo Area Metrics: Alternative Algorithms</title>
+  <script id="38" type="text/markdown">
+    # CoMapeo Area Metrics: Alternative Algorithms
+
+    Other ways to turn a project's records into an area, and what goes wrong with each. The [footprint](./footprint) and [extent](./extent-closing) notebooks explain the two figures CoMapeo reports; this one shows the simpler estimates we could have used instead, side by side on the same scenarios.
+
+    A useful estimate has to do four things. Follow the shape of the records, so a river territory is not counted as the land between its bends. Ignore strays: a training day in another town, or a colleague who opened the app at a conference abroad, must not add land. Not depend on an arbitrary choice of scale. And grow when new ground is covered, not when the same ground is recorded again.
+
+    Pick a scenario to see every estimate drawn on it. The two stray cases are the ones to try first.
+  </script>
+  <script id="6" type="module">
+    const scenarioSpec = view(
+      Inputs.select(catalogue, {
+        label: "Scenario",
+        format: (spec) => spec.name,
+        value: catalogue.find((spec) =>
+          spec.name.startsWith("Territory plus a training day 300"),
+        ),
+      }),
+    );
+  </script>
+  <script id="7" type="text/markdown">
+    **${scenario.name}.** ${scenario.tests}
+  </script>
+  <script id="8" type="module">
+    const seed = view(
+      Inputs.number([0, 999999], {
+        label: "Seed",
+        value: 1,
+        step: 1,
+      }),
+    );
+  </script>
+  <script id="9" type="module" pinned="">
+    const scenario = makeScenario(scenarioSpec, seed);
+    const { projection, xyRecords } = projectRecords(buildRecords(scenario));
+    const estimates = estimateAll(xyRecords);
+  </script>
+  <script id="10" type="module">
+    html`<div
+      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px 12px;"
+    >
+      ${estimates.map(
+        (estimate) =>
+          html`<figure style="margin: 0;">
+            ${scenarioMap({
+              toMetres: projection.toMetres,
+              xyRecords,
+              scenario,
+              compact: true,
+              width: 320,
+              height: 240,
+              overlay: shapeOverlay(estimate),
+            })}
+            <figcaption>
+              <b>${estimate.name}</b>: ${(estimate.area / 1e6).toFixed(1)}
+              km²${scenario.territoryKm2 > 0 ? `, ${(estimate.area / 1e6 / scenario.territoryKm2).toFixed(2)} × the territory` : ""}
+            </figcaption>
+          </figure>`,
+      )}
+    </div>`
+  </script>
+  <script id="11" type="text/markdown">
+    ## Every estimate on every scenario
+
+    Each estimate as a multiple of the territory, on a log scale, so 1 is exact, 10 is ten times too large and 0.1 is a tenth. Scenarios without a territory are left out. The axis runs from 0.02 to 20; a value beyond that sits on the edge and is written out at the right. Hover a mark for the exact figure.
+  </script>
+  <script id="12" type="module" pinned="">
+    const comparison = catalogue.flatMap((spec) => {
+      const s = makeScenario(spec, seed);
+      const { xyRecords } = projectRecords(buildRecords(s));
+      return estimateAll(xyRecords).map((estimate) => ({
+        scenario: s.name,
+        method: estimate.name,
+        km2: estimate.area / 1e6,
+        territory: s.territoryKm2,
+        ratio: s.territoryKm2 > 0 ? estimate.area / 1e6 / s.territoryKm2 : null,
+      }));
+    });
+  </script>
+  <script id="13" type="module">
+    const [low, high] = [0.02, 20];
+    const rows = comparison.filter((row) => row.ratio > 0);
+    const offScale = d3
+      .groups(
+        rows.filter((row) => row.ratio < low || row.ratio > high),
+        (row) => row.scenario,
+      )
+      .map(([scenario, group]) => ({
+        scenario,
+        text:
+          group.length > 2
+            ? `${group.length} methods ${group[0].ratio > high ? "above" : "below"} ${group[0].ratio > high ? high : low}×`
+            : d3
+                .sort(group, (row) => -row.ratio)
+                .map((row) => `${row.method} ${row.ratio.toPrecision(2)}×`)
+                .join("\n"),
+      }));
+
+    display(
+      Plot.plot({
+        width: Math.min(width, 960),
+        height: 560,
+        marginLeft: 250,
+        marginRight: 150,
+        x: {
+          type: "log",
+          domain: [low, high],
+          clamp: true,
+          ticks: [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20],
+          tickFormat: (d) => `${d}×`,
+          label: "estimate ÷ territory",
+          grid: true,
+        },
+        y: { label: null, domain: catalogue.map((spec) => spec.name) },
+        symbol: {
+          legend: true,
+          domain: METHOD_NAMES,
+          range: [
+            "square2",
+            "triangle2",
+            "wye",
+            "circle",
+            "plus",
+            "diamond2",
+            "asterisk",
+            "times",
+          ],
+        },
+        marks: [
+          Plot.ruleX([1]),
+          Plot.dot(rows, {
+            x: "ratio",
+            y: "scenario",
+            symbol: "method",
+            stroke: "method",
+            r: 4.5,
+            tip: true,
+          }),
+          Plot.text(offScale, {
+            x: high,
+            y: "scenario",
+            text: "text",
+            textAnchor: "start",
+            dx: 10,
+            fontSize: 9,
+          }),
+        ],
+      }),
+    );
+  </script>
+  <script id="14" type="module">
+    Inputs.table(
+      catalogue.map((spec) => {
+        const rows = comparison.filter((row) => row.scenario === spec.name);
+        return Object.fromEntries([
+          ["scenario", spec.name],
+          ["territory", rows[0]?.territory ?? 0],
+          ...rows.map((row) => [row.method, row.km2]),
+        ]);
+      }),
+      {
+        format: Object.fromEntries(
+          ["territory", ...METHOD_NAMES].map((name) => [name, (v) => v.toFixed(1)]),
+        ),
+        select: false,
+        rows: 30,
+      },
+    )
+  </script>
+  <script id="15" type="text/markdown">
+    ## The alternatives
+
+    Each of the simple estimates below works on the positions in the records: every observation and every vertex of every track. Areas are in the units of the coordinates squared, metres here.
+
+    ### Bounding box
+
+    The smallest rectangle, aligned north and south, that holds every record. It is the easiest figure to compute and the worst: a territory lying diagonally fills a quarter of its box, and a single stray record anywhere drags a corner of the box out to it. Three records at a conference 1,500 km away turn a village territory into a rectangle the size of a country.
+  </script>
+  <script id="16" type="module" pinned="">
+    function boundingBox(points) {
+      if (!points.length) return { area: 0 };
+      const [x0, x1] = d3.extent(points, (p) => p[0]);
+      const [y0, y1] = d3.extent(points, (p) => p[1]);
+      return {
+        area: (x1 - x0) * (y1 - y0),
+        polygons: [
+          [
+            [x0, y0],
+            [x1, y0],
+            [x1, y1],
+            [x0, y1],
+          ],
+        ],
+      };
+    }
+  </script>
+  <script id="17" type="text/markdown">
+    ### Convex hull
+
+    A rubber band stretched around every record. Better than the box, because it follows the records' orientation, but it cannot bend inwards: the land between two footpaths, inside a river's bends, or between two villages is counted whether or not anyone went there. A stray record pulls the band out to a wedge that can be larger than the territory itself.
+  </script>
+  <script id="18" type="module" pinned="">
+    function convexHull(points) {
+      const hull = points.length >= 3 ? d3.polygonHull(points) : null;
+      if (!hull) return { area: 0, polygons: [] };
+      return { area: Math.abs(d3.polygonArea(hull)), polygons: [hull] };
+    }
+  </script>
+  <script id="19" type="text/markdown">
+    ### Convex hull of the nearest 95 %
+
+    The convex hull again, after dropping the 5 % of records farthest from the average position. This is how animal home ranges are often reported, and it does deal with a handful of far-away records. It still cannot bend inwards, and the cut is by count rather than by distance, so it throws away real work at the edge of a big territory while keeping a training day that happens to hold more than 5 % of a small project's records.
+  </script>
+  <script id="20" type="module" pinned="">
+    function trimmedHull(points, keep = 0.95) {
+      const centre = [d3.mean(points, (p) => p[0]), d3.mean(points, (p) => p[1])];
+      const nearest = d3.sort(points, (p) =>
+        Math.hypot(p[0] - centre[0], p[1] - centre[1]),
+      );
+      return convexHull(nearest.slice(0, Math.ceil(nearest.length * keep)));
+    }
+  </script>
+  <script id="21" type="text/markdown">
+    ### A disc around the average position
+
+    The average position of all records and the radius that takes in 95 % of them. It ignores the shape of the territory entirely, so a road corridor 100 km long becomes a disc 100 km across, and strays both move the centre and widen the disc.
+  </script>
+  <script id="22" type="module" pinned="">
+    function centreDisc(points, share = 0.95) {
+      if (!points.length) return { area: 0 };
+      const centre = [d3.mean(points, (p) => p[0]), d3.mean(points, (p) => p[1])];
+      const radius = d3.quantile(
+        points.map((p) => Math.hypot(p[0] - centre[0], p[1] - centre[1])),
+        share,
+      );
+      return { area: Math.PI * radius ** 2, circles: [{ centre, radius }] };
+    }
+  </script>
+  <script id="23" type="text/markdown">
+    ### Grid cells visited
+
+    Lay a grid of 2 km cells over the map and count the cells with a record in them. This is the IUCN's "area of occupancy", and it is immune to strays, which add one cell each. But the figure is the cell size as much as the data: a single observation is 4 km², two observations 100 m apart are 4 or 8 km² depending on where the grid lines fall, and nothing between visited cells is counted, so the same territory scores differently at every cell size.
+  </script>
+  <script id="24" type="module" pinned="">
+    function gridCells(points, cellM = 2000) {
+      const cells = new Set(
+        points.map(([x, y]) => `${Math.floor(x / cellM)},${Math.floor(y / cellM)}`),
+      );
+      return {
+        area: cells.size * cellM * cellM,
+        polygons: Array.from(cells, (key) => {
+          const [c, r] = key.split(",").map(Number);
+          return [
+            [c * cellM, r * cellM],
+            [(c + 1) * cellM, r * cellM],
+            [(c + 1) * cellM, (r + 1) * cellM],
+            [c * cellM, (r + 1) * cellM],
+          ];
+        }),
+      };
+    }
+  </script>
+  <script id="25" type="text/markdown">
+    ### The footprint and the extent
+
+    The footprint is the ground within 500 m of any record, counted on a 100 m grid. It is immune to strays in the same way the grid count is (a stray adds one disc) and does not depend on where a grid line falls, but it is a lower figure by design: it never fills the ground between two footpaths. The extent, the figure CoMapeo reports, grows every record by half a 5 km linking distance and shrinks the result back by that less a 250 m margin, filling encircled ground up to 25 km² and dropping a stray cluster that is far from the largest one with few records. Both come from their own notebooks; the settings here are the defaults.
+  </script>
+  <script id="26" type="module" pinned="">
+    function footprint(xyRecords) {
+      const lines = xyRecords.map((record) => simplifyLine(record.xy, 50));
+      const { area } = calculateFootprint(lines, { buffer: 500, cellSize: 100 });
+      return { area, buffered: { records: xyRecords, radius: 500 } };
+    }
+
+    function extent(xyRecords) {
+      const closed = closingExtent(xyRecords, {
+        linkM: 5000,
+        marginM: 250,
+        cellSize: 100,
+        maxHoleM2: 25e6,
+        strayKm: 50,
+      });
+      return {
+        area: closed.area,
+        rects: closed.clusters
+          .filter((cluster) => cluster.kept)
+          .flatMap((cluster) => cluster.runs),
+      };
+    }
+  </script>
+  <script id="27" type="text/markdown">
+    ### Fenced triangles, the earlier design
+
+    Before settling on growing and shrinking we built the extent from triangles: join samples along the records into Delaunay triangles, call any edge shorter than the linking distance a link, and keep every triangle that cannot be reached from outside without crossing a link. It follows the records well and drops strays the same way, but it is all or nothing. The ground between two footpaths is either counted in full or not at all, and flips from one to the other when the paths come within a linking distance of each other; the closing fills that ground only as far in as the paths are close. The code is the earlier notebook's, kept here so the two can be compared.
+  </script>
+  <script id="28" type="module" pinned="">
+    function fencedExtent(xyRecords) {
+      const { samples, recordCount } = collectSamples(xyRecords, 2500, 625);
+      const points = samples.map((sample) => [sample.x, sample.y]);
+      const labels = clusterByDistance(points, 5000);
+      const clusters = Array.from(
+        d3.group(d3.range(points.length), (i) => labels[i]).values(),
+        (members) => ({
+          points: members.map((i) => points[i]),
+          records: new Set(members.flatMap((i) => samples[i].records)).size,
+          centroid: [
+            d3.mean(members, (i) => points[i][0]),
+            d3.mean(members, (i) => points[i][1]),
+          ],
+        }),
+      ).sort((a, b) => b.records - a.records);
+      const [largest] = clusters;
+      const kept = clusters.filter((cluster) => {
+        const km =
+          Math.hypot(
+            cluster.centroid[0] - largest.centroid[0],
+            cluster.centroid[1] - largest.centroid[1],
+          ) / 1000;
+        return (
+          cluster === largest || km <= 50 || cluster.records / recordCount >= 0.05
+        );
+      });
+      const hulls = kept.map((cluster) => clusterHull(cluster.points, 5000, 250));
+      return {
+        area: d3.sum(hulls, (hull) => hull.area),
+        polygons: hulls.flatMap((hull) => hull.triangles),
+        lines: hulls.flatMap((hull) => [...hull.boundaryEdges, ...hull.openLinks]),
+        circles: hulls.flatMap((hull) =>
+          hull.isolated.map((centre) => ({ centre, radius: 250 })),
+        ),
+      };
+    }
+  </script>
+  <script id="29" type="module" pinned="">
+    function collectSamples(records, stepM, cellM) {
+      const byCell = new Map();
+      // Delaunay triangulation misbehaves on points in a straight line, such as samples
+      // along a two-vertex track, so each stored sample is nudged by a thousandth of a cell.
+      const nudge = cellM / 1000;
+      let sampled = 0;
+      let recordCount = 0;
+      let index = 0;
+      for (const record of records) {
+        const counted = record.kind !== "implied";
+        if (counted) recordCount++;
+        for (const [x, y] of sampleLine(record.xy, stepM)) {
+          sampled++;
+          const key = `${Math.round(x / cellM)},${Math.round(y / cellM)}`;
+          let sample = byCell.get(key);
+          if (!sample) {
+            sample = {
+              x: x + nudge * Math.sin(x + y),
+              y: y + nudge * Math.cos(x - y),
+              records: [],
+            };
+            byCell.set(key, sample);
+          }
+          if (counted && sample.records.at(-1) !== index)
+            sample.records.push(index);
+        }
+        index++;
+      }
+      return { samples: [...byCell.values()], sampled, recordCount };
+    }
+
+    // The first point, a point every stepM along the line, and the last point.
+    function* sampleLine(line, stepM) {
+      yield line[0];
+      let untilNext = stepM;
+      for (let i = 1; i < line.length; i++) {
+        const [ax, ay] = line[i - 1];
+        const [bx, by] = line[i];
+        const length = Math.hypot(bx - ax, by - ay);
+        let along = untilNext;
+        for (; along <= length; along += stepM)
+          yield [
+            ax + ((bx - ax) * along) / length,
+            ay + ((by - ay) * along) / length,
+          ];
+        untilNext = along - length;
+      }
+      if (line.length > 1) yield line.at(-1);
+    }
+
+    function clusterByDistance(points, linkM) {
+      const { find, union } = unionFind(points.length);
+      const delaunay = d3.Delaunay.from(points);
+      for (let i = 0; i < points.length; i++)
+        for (const j of delaunay.neighbors(i))
+          if (j > i && distance(points[i], points[j]) <= linkM) union(i, j);
+      const labelOfRoot = new Map();
+      return points.map((_, i) => {
+        const root = find(i);
+        if (!labelOfRoot.has(root)) labelOfRoot.set(root, labelOfRoot.size);
+        return labelOfRoot.get(root);
+      });
+    }
+
+    function clusterHull(points, linkM, marginM) {
+      const { triangles: indices, halfedges } =
+        points.length >= 3
+          ? d3.Delaunay.from(points)
+          : { triangles: [], halfedges: [] };
+      // Halfedge e belongs to triangle floor(e / 3) and runs from indices[e] to indices[next(e)].
+      const triangleOf = (e) => Math.floor(e / 3);
+      const next = (e) => (e % 3 === 2 ? e - 2 : e + 1);
+      const endpoints = (e) => [points[indices[e]], points[indices[next(e)]]];
+      const isLink = (e) => distance(...endpoints(e)) <= linkM;
+
+      // A triangle is outside if it can be reached from beyond the convex hull without crossing a link.
+      const outside = new Uint8Array(indices.length / 3);
+      const queue = [];
+      const visit = (t) => {
+        if (!outside[t]) {
+          outside[t] = 1;
+          queue.push(t);
+        }
+      };
+      for (let e = 0; e < indices.length; e++)
+        if (halfedges[e] === -1 && !isLink(e)) visit(triangleOf(e));
+      while (queue.length) {
+        const t = queue.pop();
+        for (let e = 3 * t; e < 3 * t + 3; e++)
+          if (halfedges[e] !== -1 && !isLink(e)) visit(triangleOf(halfedges[e]));
+      }
+      const kept = (t) => t !== -1 && !outside[t];
+
+      const triangles = [];
+      const boundaryEdges = [];
+      const openLinks = [];
+      const edges = { links: [], long: [] };
+      const { find, union } = unionFind(points.length);
+      const linked = new Set();
+      for (let e = 0; e < indices.length; e++) {
+        const t = triangleOf(e);
+        const across = halfedges[e] === -1 ? -1 : triangleOf(halfedges[e]);
+        if (e % 3 === 0 && kept(t))
+          triangles.push([0, 1, 2].map((k) => points[indices[e + k]]));
+        if (kept(t) && !kept(across)) boundaryEdges.push(endpoints(e));
+        const firstSide = across === -1 || e < halfedges[e];
+        if (firstSide) (isLink(e) ? edges.links : edges.long).push(endpoints(e));
+        if (!isLink(e)) continue;
+        union(indices[e], indices[next(e)]);
+        linked.add(indices[e]).add(indices[next(e)]);
+        if (firstSide && !kept(t) && !kept(across)) openLinks.push(endpoints(e));
+      }
+      if (points.length === 2 && distance(points[0], points[1]) <= linkM) {
+        openLinks.push([points[0], points[1]]);
+        edges.links.push([points[0], points[1]]);
+        union(0, 1);
+        linked.add(0).add(1);
+      }
+      const isolated = points.filter((_, i) => !linked.has(i));
+      const pieces = points.filter((_, i) => find(i) === i).length;
+
+      const area =
+        d3.sum(triangles, (triangle) => Math.abs(d3.polygonArea(triangle))) +
+        marginM * d3.sum(boundaryEdges, ([a, b]) => distance(a, b)) +
+        2 * marginM * d3.sum(openLinks, ([a, b]) => distance(a, b)) +
+        pieces * Math.PI * marginM ** 2;
+      return { triangles, boundaryEdges, openLinks, edges, isolated, pieces, area };
+    }
+
+    const distance = ([ax, ay], [bx, by]) => Math.hypot(bx - ax, by - ay);
+
+    function unionFind(size) {
+      const parent = Array.from({ length: size }, (_, i) => i);
+      const find = (i) => {
+        while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+        return i;
+      };
+      const union = (i, j) => {
+        parent[find(i)] = find(j);
+      };
+      return { find, union };
+    }
+  </script>
+  <script id="30" type="text/markdown">
+    ## Running them all
+
+    `estimateAll` runs every method on one record set and returns the areas with whatever shapes each one has to draw: polygons, lines, circles, rectangles or buffered records.
+  </script>
+  <script id="31" type="module" pinned="">
+    const METHOD_NAMES = [
+      "bounding box",
+      "convex hull",
+      "hull of nearest 95 %",
+      "disc around the average",
+      "2 km grid cells",
+      "footprint",
+      "extent",
+      "fenced triangles",
+    ];
+
+    function estimateAll(xyRecords) {
+      const points = xyRecords.flatMap((record) => record.xy);
+      const results = [
+        boundingBox(points),
+        convexHull(points),
+        trimmedHull(points),
+        centreDisc(points),
+        gridCells(points),
+        footprint(xyRecords),
+        extent(xyRecords),
+        fencedExtent(xyRecords),
+      ];
+      return results.map((result, i) => ({ name: METHOD_NAMES[i], ...result }));
+    }
+  </script>
+  <script id="32" type="module">
+    const shapeStyle = {
+      fill: PALETTE.keptHull,
+      "fill-opacity": 0.2,
+      stroke: PALETTE.keptHull,
+      "stroke-width": 1.2,
+    };
+
+    function shapeOverlay({
+      polygons = [],
+      lines = [],
+      circles = [],
+      rects = [],
+      buffered,
+    }) {
+      return ({ view, X, Y, k, pathOf }) => {
+        const group = applyStyle(view.append("g"), shapeStyle);
+        if (buffered) {
+          const points = buffered.records.filter(
+            (record) => record.xy.length === 1,
+          );
+          const tracks = buffered.records.filter((record) => record.xy.length > 1);
+          group
+            .selectAll("circle")
+            .data(points)
+            .join("circle")
+            .attr("cx", (record) => X(record.xy[0][0]))
+            .attr("cy", (record) => Y(record.xy[0][1]))
+            .attr("r", buffered.radius * k);
+          group
+            .append("path")
+            .attr("d", tracks.map((record) => pathOf(record.xy)).join(""))
+            .attr("fill", "none")
+            .attr("stroke-width", 2 * buffered.radius * k)
+            .attr("stroke-linecap", "round")
+            .attr("stroke-linejoin", "round");
+          return;
+        }
+        group
+          .append("path")
+          .attr("d", polygons.map((ring) => pathOf(ring, true)).join(""));
+        group
+          .append("path")
+          .attr("d", lines.map((line) => pathOf(line)).join(""))
+          .attr("fill", "none");
+        group
+          .selectAll("circle")
+          .data(circles)
+          .join("circle")
+          .attr("cx", (c) => X(c.centre[0]))
+          .attr("cy", (c) => Y(c.centre[1]))
+          .attr("r", (c) => c.radius * k);
+        group
+          .selectAll("rect")
+          .data(rects)
+          .join("rect")
+          .attr("x", (r) => X(r.x1))
+          .attr("y", (r) => Y(r.y2))
+          .attr("width", (r) => (r.x2 - r.x1) * k)
+          .attr("height", (r) => (r.y2 - r.y1) * k)
+          .attr("stroke", "none");
+      };
+    }
+  </script>
+  <script id="33" type="text/markdown">
+    ## Scenarios
+
+    The catalogue from the scenarios notebook, plus one built here: the village territory with three records taken at a conference 1,500 km to the east, the case where someone opened the app far from home.
+  </script>
+  <script id="34" type="module" pinned="">
+    const village = scenarioCatalogue.find(
+      (spec) => spec.name === "Village territory",
+    );
+    const conference = {
+      name: "Village territory plus a conference abroad",
+      seed: village.seed,
+      tests:
+        "The village territory, plus three records taken on one day at a conference 1,500 km to the east. Nothing about the territory has changed; every estimate that grows is being fooled.",
+      make(rng) {
+        const scenario = village.make(rng);
+        const [first] = scenario.points;
+        const far = [0, 1, 2].map((i) => ({
+          lon: first.lon + 13.5 + i * 0.001,
+          lat: first.lat + i * 0.001,
+          device: "E",
+          time: first.time + 10 * 86400000 + i * 600000,
+        }));
+        return { ...scenario, points: [...scenario.points, ...far] };
+      },
+    };
+    const catalogue = [...scenarioCatalogue, conference];
+  </script>
+  <script id="35" type="text/markdown">
+    ## Imports
+  </script>
+  <script id="36" type="module" pinned="">
+    import {
+      scenarioCatalogue,
+      makeScenario,
+      buildRecords,
+      projectRecords,
+    } from "observable:@gmaclennan/scenarios";
+    import {
+      scenarioMap,
+      applyStyle,
+      PALETTE,
+    } from "observable:@gmaclennan/scenario-map";
+    import {
+      calculateFootprint,
+      simplifyLine,
+    } from "observable:@gmaclennan/footprint";
+    import { closingExtent } from "observable:@gmaclennan/extent";
+  </script>
+</notebook>

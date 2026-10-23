@@ -1,0 +1,80 @@
+[
+ {
+  "name": "default",
+  "base": [
+   -62.2,
+   -3.5
+  ],
+  "meanLatDeg": -3.2336470425486854,
+  "meanLatDegNoImplied": -3.2385966870179095,
+  "impliedCount": 4,
+  "footprintArea": 114770000,
+  "footprintAreaNoImplied": 114430000,
+  "extentArea": 181940000
+ },
+ {
+  "name": "default",
+  "base": [
+   10,
+   60
+  ],
+  "meanLatDeg": 60.26635295745132,
+  "meanLatDegNoImplied": 60.26140331298211,
+  "impliedCount": 4,
+  "footprintArea": 114120000,
+  "footprintAreaNoImplied": 114120000,
+  "extentArea": 180350000
+ },
+ {
+  "name": "territory",
+  "base": [
+   -62.2,
+   -3.5
+  ],
+  "meanLatDeg": -3.2217964001218187,
+  "meanLatDegNoImplied": -3.2216295012890748,
+  "impliedCount": 3,
+  "footprintArea": 1795210000,
+  "footprintAreaNoImplied": 1794270000,
+  "extentArea": 2515200000
+ },
+ {
+  "name": "territory",
+  "base": [
+   10,
+   60
+  ],
+  "meanLatDeg": 60.27820359987822,
+  "meanLatDegNoImplied": 60.27837049871097,
+  "impliedCount": 3,
+  "footprintArea": 1786100000,
+  "footprintAreaNoImplied": 1785150000,
+  "extentArea": 2493230000
+ },
+ {
+  "name": "loopInside",
+  "base": [
+   -62.2,
+   -3.5
+  ],
+  "meanLatDeg": -3.0175367392969585,
+  "meanLatDegNoImplied": -3.018406323866495,
+  "impliedCount": 1,
+  "footprintArea": 47410000,
+  "footprintAreaNoImplied": 47000000,
+  "extentArea": 106580000
+ },
+ {
+  "name": "loopInside",
+  "base": [
+   10,
+   60
+  ],
+  "meanLatDeg": 60.48246326070303,
+  "meanLatDegNoImplied": 60.4815936761335,
+  "impliedCount": 1,
+  "footprintArea": 46950000,
+  "footprintAreaNoImplied": 46800000,
+  "extentArea": 105560000
+ }
+]

@@ -1,0 +1,243 @@
+<!doctype html>
+<notebook theme="air">
+  <title>CoMapeo Area Metrics: Footprint &amp; Extent</title>
+  <script id="2" type="text/markdown">
+    # CoMapeo Area Metrics: Footprint & Extent
+
+    Every scenario from the [scenarios](./scenarios) notebook, with its [footprint](./footprint) on the left and its [extent](./extent) on the right, and both figures against the territory the scenario was drawn from. The two maps of a scenario move together: drag, scroll or double-click on either.
+
+    The footprint is the ground within the buffer of any record, the lower figure. The extent grows every record by half the linking distance, fills encircled ground up to the chosen size, and shrinks back by that less the margin, the upper figure. The settings below apply to every scenario.
+  </script>
+  <script id="3" type="module">
+    const buffer = view(
+      Inputs.range([50, 1000], {
+        label: "Footprint buffer (m)",
+        step: 50,
+        value: 500,
+      }),
+    );
+  </script>
+  <script id="4" type="module">
+    const linkingKm = view(
+      Inputs.range([0.5, 20], {
+        label: "Extent linking distance (km)",
+        step: 0.5,
+        value: 5,
+      }),
+    );
+  </script>
+  <script id="5" type="module">
+    const marginM = view(
+      Inputs.range([0, 1000], {
+        label: "Extent margin (m)",
+        step: 50,
+        value: 250,
+      }),
+    );
+  </script>
+  <script id="6" type="module">
+    const holeKm2 = view(
+      Inputs.range([0, 400], {
+        label: "Fill encircled ground up to (km²)",
+        step: 5,
+        value: 25,
+      }),
+    );
+  </script>
+  <script id="7" type="module">
+    const seed = view(
+      Inputs.number([0, 999999], {
+        label: "Seed",
+        value: 1,
+        step: 1,
+      }),
+    );
+  </script>
+  <script id="9" type="module">
+    for (const { scenario, footprint, extent } of results) {
+      const footprintKm2 = footprint.area / 1e6;
+      const extentKm2 = extent.area / 1e6;
+      const share = (km2) =>
+        scenario.territoryKm2 > 0
+          ? ` (${((100 * km2) / scenario.territoryKm2).toFixed(0)} %)`
+          : "";
+      const size = { width: 470, height: 340 };
+      let right;
+      const left = scenarioMap({
+        ...size,
+        toMetres: footprint.projection.toMetres,
+        xyRecords: footprint.xyRecords,
+        scenario,
+        title: "Footprint",
+        underlay: footprintUnderlay(footprint, buffer),
+        legend: [{ ...bufferStyle, label: `within ${buffer} m of a record` }],
+        onZoom: (transform) => right?.zoomTo(transform),
+      });
+      right = scenarioMap({
+        ...size,
+        toMetres: extent.projection.toMetres,
+        xyRecords: extent.xyRecords,
+        scenario,
+        title: "Extent",
+        overlay: extentOverlay(extent),
+        legend: [
+          { ...keptStyle, label: "kept cluster extent" },
+          { ...droppedStyle, label: "dropped cluster" },
+        ],
+        onZoom: (transform) => left.zoomTo(transform),
+      });
+      display(
+        html`<h3>${scenario.name}</h3>
+          <p>
+            <b>Footprint ${footprintKm2.toFixed(1)} km²</b>${share(footprintKm2)} ·
+            <b>Extent ${extentKm2.toFixed(1)} km²</b>${share(extentKm2)} · territory
+            ${scenario.territoryKm2.toFixed(1)} km²
+          </p>
+          <p>${scenario.tests}</p>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1 1 300px; min-width: 0;">${left}</div>
+            <div style="flex: 1 1 300px; min-width: 0;">${right}</div>
+          </div>
+          <hr />`,
+      );
+    }
+  </script>
+  <script id="10" type="text/markdown">
+    ## Drawing
+
+    The footprint is drawn as the exact buffer, a disc around each observation and a round-ended stroke along each track. The extent is drawn as each kept cluster's cells, with dropped clusters as a dotted outline. Both are the same drawings as in the notebooks they come from, without the counted cells and the grown shape.
+  </script>
+  <script id="11" type="module" pinned="">
+    const bufferStyle = {
+      shape: "area",
+      fill: PALETTE.footprint,
+      stroke: PALETTE.footprint,
+      opacity: 0.45,
+    };
+    const keptStyle = {
+      shape: "area",
+      fill: PALETTE.keptHull,
+      "fill-opacity": 0.18,
+      stroke: PALETTE.keptHull,
+      "stroke-width": 1.4,
+    };
+    const droppedStyle = {
+      shape: "area",
+      fill: "none",
+      stroke: PALETTE.droppedHull,
+      "stroke-width": 1.4,
+      "stroke-dasharray": "2 4",
+    };
+
+    function footprintUnderlay(footprint, buffer) {
+      return ({ view, X, Y, k, pathOf }) => {
+        const group = applyStyle(view.append("g"), bufferStyle);
+        const points = footprint.xyRecords.filter(
+          (record) => record.xy.length === 1,
+        );
+        const lines = footprint.xyRecords.filter((record) => record.xy.length > 1);
+        group
+          .selectAll("circle")
+          .data(points)
+          .join("circle")
+          .attr("cx", (record) => X(record.xy[0][0]))
+          .attr("cy", (record) => Y(record.xy[0][1]))
+          .attr("r", buffer * k);
+        group
+          .append("path")
+          .attr("d", lines.map((record) => pathOf(record.xy)).join(""))
+          .attr("fill", "none")
+          .attr("stroke-width", 2 * buffer * k)
+          .attr("stroke-linecap", "round")
+          .attr("stroke-linejoin", "round");
+      };
+    }
+
+    function extentOverlay(extent) {
+      return ({ view, X, Y, k }) => {
+        const pathOf = (segments) =>
+          segments
+            .map(
+              ([[ax, ay], [bx, by]]) =>
+                `M${X(ax).toFixed(1)},${Y(ay).toFixed(1)}L${X(bx).toFixed(1)},${Y(by).toFixed(1)}`,
+            )
+            .join("");
+        for (const cluster of extent.clusters) {
+          const style = cluster.kept ? keptStyle : droppedStyle;
+          if (cluster.kept) {
+            view
+              .append("g")
+              .attr("fill", style.fill)
+              .attr("fill-opacity", style["fill-opacity"])
+              .selectAll("rect")
+              .data(cluster.runs)
+              .join("rect")
+              .attr("x", (run) => X(run.x1))
+              .attr("y", (run) => Y(run.y2))
+              .attr("width", (run) => (run.x2 - run.x1) * k)
+              .attr("height", (run) => (run.y2 - run.y1) * k);
+          }
+          applyStyle(view.append("path"), { ...style, fill: "none" }).attr(
+            "d",
+            pathOf(cluster.outline),
+          );
+          view
+            .append("text")
+            .attr("x", X(cluster.centroid[0]) + 6)
+            .attr("y", Y(cluster.centroid[1]) - 6)
+            .attr("font-size", 11)
+            .attr("font-family", "var(--sans-serif)")
+            .attr("fill", style.stroke)
+            .attr("stroke", PAPER)
+            .attr("stroke-width", 3)
+            .attr("paint-order", "stroke")
+            .text(
+              cluster.kept
+                ? `cluster ${cluster.id}`
+                : `cluster ${cluster.id} dropped: ${cluster.reason}`,
+            );
+        }
+      };
+    }
+  </script>
+  <script id="12" type="text/markdown">
+    ## Imports
+
+    The estimates come from the [footprint](./footprint) and [extent](./extent) notebooks, the data from [scenarios](./scenarios), and the map from [scenario map](./scenario-map).
+  </script>
+  <script id="13" type="module" pinned="">
+    import {
+      scenarioCatalogue,
+      makeScenario,
+    } from "observable:@gmaclennan/scenarios";
+    import {
+      scenarioMap,
+      applyStyle,
+      PALETTE,
+      PAPER,
+    } from "observable:@gmaclennan/scenario-map";
+    import { footprintOf } from "observable:@gmaclennan/footprint";
+    import { extentOf } from "observable:@gmaclennan/extent";
+  </script>
+  <script id="8" type="module" pinned="">
+    const results = scenarioCatalogue.map((spec) => {
+      const scenario = makeScenario(spec, seed);
+      return {
+        scenario,
+        footprint: footprintOf(scenario, {
+          buffer,
+          cellSize: 100,
+          impliedPaths: true,
+        }),
+        extent: extentOf(scenario, {
+          linkingKm,
+          marginM,
+          holeKm2,
+          cellSize: 100,
+          strayKm: 50,
+          impliedPaths: true,
+        }),
+      };
+    });
+  </script>
+</notebook>

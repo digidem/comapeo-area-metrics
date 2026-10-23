@@ -1,0 +1,419 @@
+<!doctype html>
+<notebook theme="air">
+  <title>CoMapeo Area Metrics: Footprint</title>
+  <script id="2" type="text/markdown">
+    # CoMapeo Area Metrics: Footprint
+
+    The "footprint" of CoMapeo mapping and monitoring data is an estimate of the ground a project team covered: the area they would have seen while collecting the data. It is the lower figure for "area mapped and monitored by CoMapeo"; distinct from  [extent](./extent) which is an estimate of the overall territory a team is working in.
+
+    The footprint is the area within a `buffer` radius _r_ of any observation or track. We estimate it cheaply by counting the number of cells of `cellSize` whose centre lies within `buffer` of a record. We also calculate "implied paths" — an assumption that a team has walked in a straight line between observations made close together in time and space, and so covered that ground too.
+
+    The data comes from the randomly generated [scenarios](./scenarios). Pick one to see its footprint on the map below.
+  </script>
+  <script id="10" type="module">
+    const scenarioSpec = view(
+      Inputs.select(scenarioCatalogue, {
+        label: "Scenario",
+        format: (spec) => spec.name
+      })
+    );
+
+  </script>
+  <script id="36" type="text/markdown">
+    **${scenario.name}.** ${scenario.tests}
+  </script>
+  <script id="35" type="module">
+    const [mapWidth, mapHeight] = [960, 640];
+    const bufferStyle = {
+      shape: "area",
+      fill: PALETTE.footprint,
+      stroke: PALETTE.footprint,
+      opacity: 0.45
+    };
+    const cellStyle = {
+      shape: "area",
+      fill: "none",
+      stroke: PALETTE.track,
+      "stroke-width": 0.6,
+      opacity: 0.7
+    };
+    // Below this many pixels a cell is a smudge, and a whole territory would be tens of thousands of squares.
+    const CELL_MIN_PX = 4;
+
+    view(scenarioMap({
+      width: mapWidth,
+      height: mapHeight,
+      toMetres: footprint.projection.toMetres,
+      xyRecords: footprint.xyRecords,
+      scenario,
+      title: `${scenario.name}. Drag to pan, wheel to zoom, double-click to fit.`,
+      underlay: (map) => {
+        drawBuffer(map);
+        drawCells(map);
+      },
+      legend: [
+        {...bufferStyle, label: `within ${buffer} m of a record`},
+        {...cellStyle, label: "counted cell (zoom in to see them)"}
+      ]
+    }));
+
+    // The exact buffer: a disc around each observation and a fat round-ended stroke along each track.
+    function drawBuffer({view, X, Y, k, pathOf}) {
+      const group = applyStyle(view.append("g"), bufferStyle);
+      const points = footprint.xyRecords.filter((record) => record.xy.length === 1);
+      const lines = footprint.xyRecords.filter((record) => record.xy.length > 1);
+      group
+        .selectAll("circle")
+        .data(points)
+        .join("circle")
+        .attr("cx", (record) => X(record.xy[0][0]))
+        .attr("cy", (record) => Y(record.xy[0][1]))
+        .attr("r", buffer * k);
+      group
+        .append("path")
+        .attr("d", lines.map((record) => pathOf(record.xy)).join(""))
+        .attr("fill", "none")
+        .attr("stroke-width", 2 * buffer * k)
+        .attr("stroke-linecap", "round")
+        .attr("stroke-linejoin", "round");
+    }
+
+    // The counted cells, only once they are big enough to see and only inside the visible box.
+    function drawCells({view, X, Y, k}) {
+      const size = footprint.cellSize;
+      const sizePx = size * k;
+      if (sizePx < CELL_MIN_PX) return;
+      // X(0) and Y(0) are where metre 0 sits on screen.
+      const [minX, maxX] = [-X(0) / k, (mapWidth - X(0)) / k];
+      const [minY, maxY] = [(Y(0) - mapHeight) / k, Y(0) / k];
+      let d = "";
+      for (const [row, column] of footprint.cells) {
+        const [x, y] = [column * size, row * size];
+        if (x + size < minX || x > maxX || y + size < minY || y > maxY) continue;
+        d += `M${X(x).toFixed(1)},${Y(y + size).toFixed(1)}h${sizePx.toFixed(2)}v${sizePx.toFixed(2)}h${(-sizePx).toFixed(2)}z`;
+      }
+      applyStyle(view.append("path"), cellStyle).attr("d", d);
+    }
+  </script>
+  <script id="39" type="text/markdown">
+    - **Footprint: ${footprintKm2.toFixed(2)} km²**, from ${footprint.cellCount.toLocaleString()} cells of ${cellSize} m whose centre is within ${buffer} m of a record.
+    - **Territory: ${scenario.territoryKm2.toFixed(2)} km²**. ${scenario.territoryKm2 > 0 ? `The footprint covers ${((100 * footprintKm2) / scenario.territoryKm2).toFixed(1)} % of it.` : "This scenario has no territory."}
+    - **Records:** ${recordCount("point")} observations and ${recordCount("track")} tracks, plus ${recordCount("implied")} implied paths.
+    - **Vertices:** ${footprint.vertices.before.toLocaleString()} in the records, ${footprint.vertices.after.toLocaleString()} after simplification.
+    - **Compute time:** ${elapsedMs.toFixed(0)} ms.
+  </script>
+  <script id="11" type="text/markdown">
+    Buffer radius _r_ is the distance from any observation or track that we consider part of the footprint.
+  </script>
+  <script id="12" type="module">
+    const buffer = view(
+      Inputs.range([50, 1000], {
+        label: "Buffer radius r (m)",
+        step: 50,
+        value: 500
+      })
+    );
+
+  </script>
+  <script id="14" type="text/markdown">
+    The cell size affects the accuracy of the area calculation. Smaller is more accurate, but the calculation is slower.
+  </script>
+  <script id="15" type="module">
+    const cellSize = view(
+      Inputs.range([10, 500], {
+        label: "Cell size (m)",
+        step: 10,
+        value: 100
+      })
+    );
+  </script>
+  <script id="17" type="text/markdown">
+    Change the seed to see different randomly generated data for the scenarios.
+  </script>
+  <script id="7" type="module">
+    const seed = view(
+      Inputs.number([0, 999999], {
+        label: "Seed",
+        value: 1,
+        step: 1
+      })
+    );
+  </script>
+  <script id="34" type="text/markdown">
+    ## Calculating the footprint
+
+    Our privacy commitment to our users is that the data they collect with CoMapeo is theirs and is never shared. We need to calculate the footprint on the device (often a low-end phone) and send only the result (area) to our metrics database.
+
+    Drawing circles around observations and "pills" around tracks (e.g. adding the buffer), calculating the union of those shapes, then calculating the precise area considering the curvature of the earth would freeze a phone for several seconds and use hundreds of megabytes of memory that would only grow as the dataset increases.
+
+    To keep the calculation fast and low-memory, we simplify the tracks and borrow from a technique from computer graphics for [polygon filling](https://www.cs.uic.edu/~jbell/CourseNotes/ComputerGraphics/PolygonFilling.html).
+  </script>
+  <script id="32" type="text/markdown">
+    ### Simplifying tracks
+
+    Tracks recorded with CoMapeo have thousands of vertices, as much as one every meter walked. Each track is first simplified with the [Douglas–Peucker algorithm](https://cartography-playground.gitlab.io/playgrounds/douglas-peucker-algorithm/): keep the two ends, find the vertex farthest from the straight line between them, keep it if it is farther than the tolerance and repeat on the two halves; delete everything else. Simplifying with a tolerance of half the cell width can reduce the vertices of a track to just 1% with little impact on the area estimation.
+  </script>
+  <script id="31" type="module" pinned="">
+    function simplifyLine(line, tolerance) {
+      if (line.length < 3) return line;
+      const keep = new Uint8Array(line.length);
+      keep[0] = keep[line.length - 1] = 1;
+      const stack = [[0, line.length - 1]];
+      while (stack.length) {
+        const [first, last] = stack.pop();
+        let farthest = tolerance;
+        let index = -1;
+        for (let i = first + 1; i < last; i++) {
+          const d = distanceToSegment(line[i], line[first], line[last]);
+          if (d > farthest) [farthest, index] = [d, i];
+        }
+        if (index === -1) continue;
+        keep[index] = 1;
+        stack.push([first, index], [index, last]);
+      }
+      return line.filter((_, i) => keep[i]);
+    }
+
+    function distanceToSegment([px, py], [ax, ay], [bx, by]) {
+      const [dx, dy] = [bx - ax, by - ay];
+      const lengthSq = dx * dx + dy * dy;
+      const t = lengthSq
+        ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq))
+        : 0;
+      return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+    }
+  </script>
+  <script id="49" type="text/markdown">
+    ### Projecting data
+
+    We store CoMapeo data in unprojected latitude and longitude: the position on the earth's surface. For area calculations we project the data using a [cylindrical equidistant projection](https://mathworld.wolfram.com/CylindricalEquidistantProjection.html) centered on the median latitude of the dataset. This has minimal distortion over the small distances of a CoMapeo project and is fast and easy to calculate.
+  </script>
+  <script id="41" type="text/markdown">
+    ### Counting grid cells
+
+    `calculateFootprint` takes a collection of points and lines, the buffer distance _r_ and the cell size. Lengths are in the units of the coordinates (meters) and the area is in those units squared. The `cells` in the result is for the visualization; our metrics only need the area.
+  </script>
+  <script id="30" type="text/x-typescript" pinned="">
+    type Point = [x: number, y: number];
+
+    /** Its centre is at ((column + 0.5) * cellSize, (row + 0.5) * cellSize). */
+    type Cell = [row: number, column: number];
+
+    interface FootprintOptions {
+      buffer: number;
+      /** Defaults to `buffer / 5`. */
+      cellSize?: number;
+    }
+
+    interface Footprint {
+      area: number;
+      cellSize: number;
+      cellCount: number;
+      cells: Iterable<Cell>;
+    }
+  </script>
+  <script id="42" type="text/markdown">
+    Each record is painted onto the grid: a disc of radius _r_ around every point, including every vertex of a track, and a rectangle of half-width _r_ along every segment between consecutive points. Together they make the buffer of a track: a band with round corners and round ends. A lone observation is a line of one point, so it gets one disc and no rectangles. The footprint is the number of marked cells times the area of one cell.
+  </script>
+  <script id="29" type="text/x-typescript" pinned="">
+    function calculateFootprint(
+      records: Iterable<Point | Point[]>,
+      {buffer, cellSize = buffer / 5}: FootprintOptions
+    ): Footprint {
+      const grid = new Grid(cellSize);
+      for (const record of records) {
+        const points = isPoint(record) ? [record] : record;
+        for (const point of points) grid.markDisc(point, buffer);
+        for (let i = 1; i < points.length; i++)
+          grid.markBand(points[i - 1], points[i], buffer);
+      }
+      const {cellCount} = grid;
+      return {
+        area: cellCount * cellSize * cellSize,
+        cellSize,
+        cellCount,
+        cells: cellsOf(grid.wordsByRow)
+      };
+    }
+
+    function isPoint(record: Point | Point[]): record is Point {
+      return typeof record[0] === "number";
+    }
+  </script>
+  <script id="43" type="text/markdown">
+    ### The grid
+
+    The map is divided into square cells, and a cell counts as covered if its centre falls inside a shape. Each cell is stored as a single bit, 32 to a word, and only the parts of the grid that contain covered cells are kept in memory. This keeps memory usage down when calculating data from hundreds of points.
+
+    Shapes are filled one row of cells at a time, the same way [graphics hardware fills polygons](https://www.cs.uic.edu/~jbell/CourseNotes/ComputerGraphics/PolygonFilling.html). For each row, we find where a horizontal line through the cell centres enters and leaves the shape. For a disc, this uses Pythagoras. For a polygon, it is where the line crosses the edges. `markRow` then marks the cells between those two points, 32 at a time, and adds only newly marked cells to the total (ensuring each cell is only counted once).
+  </script>
+  <script id="28" type="text/x-typescript" pinned="">
+    class Grid {
+      cellCount = 0;
+      readonly wordsByRow = new Map<number, Map<number, number>>();
+      readonly cellSize: number;
+
+      constructor(cellSize: number) {
+        this.cellSize = cellSize;
+      }
+
+      markDisc([cx, cy]: Point, r: number): void {
+        for (const [row, y] of this.#rowsWithin(cy - r, cy + r)) {
+          const halfChord = Math.sqrt(Math.max(r * r - (y - cy) ** 2, 0));
+          this.#markRow(row, cx - halfChord, cx + halfChord);
+        }
+      }
+
+      markBand([ax, ay]: Point, [bx, by]: Point, r: number): void {
+        const length = Math.hypot(bx - ax, by - ay);
+        if (length === 0) return;
+        const [nx, ny] = [((ay - by) / length) * r, ((bx - ax) / length) * r];
+        this.#markConvexPolygon([
+          [ax + nx, ay + ny],
+          [bx + nx, by + ny],
+          [bx - nx, by - ny],
+          [ax - nx, ay - ny]
+        ]);
+      }
+
+      #markConvexPolygon(corners: Point[]): void {
+        const ys = corners.map(([, y]) => y);
+        for (const [row, y] of this.#rowsWithin(Math.min(...ys), Math.max(...ys))) {
+          let left = Infinity;
+          let right = -Infinity;
+          for (let i = 0; i < corners.length; i++) {
+            const [px, py] = corners[i];
+            const [qx, qy] = corners[(i + 1) % corners.length];
+            // A horizontal edge lying on the scanline is covered by the edges at its two ends.
+            if (py === qy || y < Math.min(py, qy) || y > Math.max(py, qy)) continue;
+            const x = px + ((y - py) / (qy - py)) * (qx - px);
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+          }
+          this.#markRow(row, left, right);
+        }
+      }
+
+      // Every row whose centre line lies within [yMin, yMax], with the height of that line.
+      *#rowsWithin(
+        yMin: number,
+        yMax: number
+      ): Generator<[row: number, y: number]> {
+        const cellSize = this.cellSize;
+        const lastRow = Math.floor(yMax / cellSize - 0.5);
+        for (let row = Math.ceil(yMin / cellSize - 0.5); row <= lastRow; row++)
+          yield [row, (row + 0.5) * cellSize];
+      }
+
+      // Marks the cells in `row` whose centre lies within [left, right].
+      #markRow(row: number, left: number, right: number): void {
+        const cellSize = this.cellSize;
+        const first = Math.ceil(left / cellSize - 0.5);
+        const last = Math.floor(right / cellSize - 0.5);
+        if (first > last) return;
+        let words = this.wordsByRow.get(row);
+        if (!words) this.wordsByRow.set(row, (words = new Map()));
+        for (
+          let word = Math.floor(first / WORD);
+          word <= Math.floor(last / WORD);
+          word++
+        ) {
+          const lo = Math.max(first - word * WORD, 0);
+          const hi = Math.min(last - word * WORD, WORD - 1);
+          const mask = (-1 << lo) & (-1 >>> (WORD - 1 - hi));
+          const bits = words.get(word) ?? 0;
+          this.cellCount += popcount(mask & ~bits);
+          words.set(word, bits | mask);
+        }
+      }
+    }
+  </script>
+  <script id="44" type="text/markdown">
+    `cellsOf` turns the set bits back into row and column numbers for the map without copying the grid
+  </script>
+  <script id="25" type="text/x-typescript" pinned="">
+    const WORD = 32;
+
+    function cellsOf(
+      wordsByRow: ReadonlyMap<number, ReadonlyMap<number, number>>
+    ): Iterable<Cell> {
+      return {
+        *[Symbol.iterator]() {
+          for (const [row, words] of wordsByRow) {
+            for (const [word, bits] of words) {
+              for (let bit = 0; bit < WORD; bit++)
+                if (bits & (1 << bit)) yield [row, word * WORD + bit];
+            }
+          }
+        }
+      };
+    }
+  </script>
+  <script id="46" type="text/markdown">
+    `popcount` counts the ones in a 32-bit word by summing pairs of bits, then groups of four, then bytes.
+  </script>
+  <script id="26" type="text/x-typescript" pinned="">
+    function popcount(bits: number): number {
+      bits -= (bits >>> 1) & 0x55555555;
+      bits = (bits & 0x33333333) + ((bits >>> 2) & 0x33333333);
+      return Math.imul((bits + (bits >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24;
+    }
+  </script>
+  <script id="47" type="text/markdown">
+    ## Memory and performance
+
+    The observations and tracks only need to be loaded one at a time into memory for the grid calculation, so the memory usage is bounded by the one bit per covered cell. The work is one row operation for each row a disc or rectangle crosses, roughly the buffer divided by the cell size, per vertex and per segment; simplification keeps the vertex count down for densely recorded tracks.
+
+    For comparison, the exact geometric answer, buffering every record and taking the union with a geometry library (turf: JSTS buffer, polyclip union, geodesic area), on synthetic records with a 500 m buffer and 100 m cells:
+
+    | Records | Grid | Buffer union | Difference in area |
+    |---|---|---|---|
+    | 500 observations, 10 tracks at 100 m vertices | 0.04 s, 6 MB | 0.7 s, 104 MB | 0.3 % |
+    | 2,000 observations, 40 tracks at 100 m vertices | 0.04 s, 36 MB | 4.6 s, 311 MB | 0.04 % |
+    | 2,000 observations, 40 tracks at 1 m vertices | 0.2 s, 111 MB | 25 s, 1,049 MB | 0.03 % |
+
+    In this comparison the grid memory usage includes the records themselves, which will be streamed from a sqlite database in the actual app, reducing the memory usage further. The calculated area is well within 1%.
+  </script>
+  <script id="24" type="text/markdown">
+    ## Imports
+
+    Scenarios and the map come from the [scenarios](./scenarios) and [scenario map](./scenario-map) notebooks.
+  </script>
+  <script id="3" type="module" pinned="">
+    import {
+      scenarioCatalogue,
+      makeScenario,
+      buildRecords,
+      projectRecords
+    } from "observable:@gmaclennan/scenarios";
+    import {
+      scenarioMap,
+      applyStyle,
+      PALETTE
+    } from "observable:@gmaclennan/scenario-map";
+  </script>
+  <script id="38" type="module" pinned="">
+    const scenario = makeScenario(scenarioSpec, seed);
+    const started = performance.now();
+    const footprint = footprintOf(scenario, {buffer, cellSize, impliedPaths: true});
+    const elapsedMs = performance.now() - started;
+    const footprintKm2 = footprint.area / 1e6;
+    const recordCount = (kind) =>
+      footprint.records.filter((record) => record.kind === kind).length;
+  </script>
+  <script id="33" type="module" pinned="">
+    function footprintOf(scenario, {buffer, cellSize, impliedPaths}) {
+      const records = buildRecords(scenario, {impliedPaths});
+      const {projection, xyRecords} = projectRecords(records);
+      const lines = xyRecords.map((record) =>
+        simplifyLine(record.xy, cellSize / 2)
+      );
+      const footprint = calculateFootprint(lines, {buffer, cellSize});
+      const vertices = {
+        before: d3.sum(xyRecords, (record) => record.xy.length),
+        after: d3.sum(lines, (line) => line.length)
+      };
+      return {...footprint, records, projection, xyRecords, vertices};
+    }
+  </script>
+</notebook>

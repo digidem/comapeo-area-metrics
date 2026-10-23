@@ -1,0 +1,512 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Scenario map</title>
+  <script id="1" type="text/markdown">
+    # Scenario map
+
+    A simple base map for viewing generated sample data and area calculations for [CoMapeo](https://comapeo.app). Used in [scenarios](./scenarios), [footprint](./footprint) and [extent](./extent) notebooks.
+  </script>
+  <script id="20" type="module">
+    {
+      const EARTH_RADIUS_M = 6371008.8;
+      const [lon0, lat0] = [-62.2, -3.5];
+      const xScale =
+        (EARTH_RADIUS_M * Math.cos((lat0 * Math.PI) / 180) * Math.PI) / 180;
+      const yScale = (EARTH_RADIUS_M * Math.PI) / 180;
+      const lonLatAt = ([x, y]) => [lon0 + x / xScale, lat0 + y / yScale];
+      const toMetres = ([lon, lat]) => [lon * xScale, lat * yScale];
+      const scenario = {
+        territory: [
+          [
+            [0, 0],
+            [6000, 500],
+            [6500, 4000],
+            [1000, 4500],
+          ].map(lonLatAt),
+        ],
+        water: [
+          [6000, 500],
+          [6500, 4000],
+          [9000, 4000],
+          [9000, 500],
+        ].map(lonLatAt),
+        routes: [
+          {
+            kind: "path",
+            coords: [
+              [800, 3900],
+              [2500, 3000],
+              [4200, 3600],
+              [6200, 2400],
+            ].map(lonLatAt),
+          },
+        ],
+      };
+      const walk = [
+        [500, 500],
+        [2000, 1500],
+        [3500, 1200],
+        [5000, 3000],
+      ].map(lonLatAt);
+      const [cx, cy] = toMetres(lonLatAt([3000, 2500]));
+      const at = (hour) => Date.UTC(2025, 0, 1, hour);
+      const xyRecords = [
+        { kind: "point", device: "A", time: at(9), coords: [walk[1]] },
+        { kind: "point", device: "A", time: at(10), coords: [walk[2]] },
+        { kind: "track", device: "A", time: at(8), coords: walk.slice(0, 3) },
+        { kind: "implied", device: "A", time: at(10), coords: walk.slice(2) },
+      ].map((record) => ({ ...record, xy: record.coords.map(toMetres) }));
+      const overlayStyle = {
+        shape: "area",
+        fill: "none",
+        stroke: PALETTE.keptHull,
+        "stroke-width": 1.6,
+        "stroke-dasharray": "8 4",
+      };
+      display(
+        scenarioMap({
+          toMetres,
+          xyRecords,
+          scenario,
+          title:
+            "Drag to pan, wheel to zoom, double-click to fit.",
+          width: 720,
+          height: 420,
+          overlay: ({ view, X, Y, k }) =>
+            applyStyle(
+              view
+                .append("circle")
+                .attr("cx", X(cx))
+                .attr("cy", Y(cy))
+                .attr("r", 800 * k),
+              overlayStyle,
+            ),
+          legend: [{ ...overlayStyle, label: "an overlay drawn by the caller" }],
+        }),
+      );
+    }
+
+  </script>
+  <script id="19" type="text/markdown">
+    ## Map Function
+
+    Call with territory, routes and water layers, and add an `underlay` drawn below tracks and an `overlay` above them but below observations (cluster hulls, Delaunay triangles). Styling is:
+
+    - open water as a hatched polygon
+    - territory as a grey fill with a dash-dot outline
+    - access routes as dotted grey lines
+    - recorded tracks as solid blue lines
+    - implied paths as dotted blue lines
+    - observations as small black dots
+
+    Returns a DOM node.
+  </script>
+  <script id="17" type="module" pinned="">
+    let hatchCount = 0;
+
+    function scenarioMap({
+      toMetres,
+      xyRecords,
+      scenario = {},
+      layers = BASE_LAYERS,
+      title = "",
+      underlay,
+      overlay,
+      legend = [],
+      width = 960,
+      height = 640,
+      compact = false,
+      onZoom
+    }) {
+      const {territory = [], routes = [], water = null} = scenario;
+      const ringsOf = (rings) =>
+        rings.map((ring) => [closeRing(ring.map(toMetres))]);
+      const territoryXY = ringsOf(territory);
+      const waterXY = ringsOf(water ? [water] : []);
+      const routesXY = routes.map((route) => route.coords.map(toMetres));
+      const linesOf = (kind) =>
+        xyRecords
+          .filter((record) => record.kind === kind)
+          .map((record) => record.xy);
+      const trackXY = linesOf("track");
+      const impliedXY = linesOf("implied");
+      const observations = xyRecords.filter((record) => record.kind === "point");
+
+      const fitted = fitPlane(
+        [
+          ...xyRecords.flatMap((r) => r.xy),
+          ...territoryXY.flat(2),
+          ...routesXY.flat()
+        ],
+        width,
+        height
+      );
+      const baseScale = fitted.scale();
+      const baseTranslate = fitted.translate();
+
+      const hatchId = `water-hatch-${++hatchCount}`;
+      const waterStyle = {...MAP_STYLE.water, fill: `url(#${hatchId})`};
+      const dotRadius = compact ? 1.6 : 2.4;
+      const barMaxPx = compact ? 90 : 180;
+
+      const svg = d3
+        .create("svg")
+        .attr("viewBox", [0, 0, width, height])
+        .attr("aria-label", title || "Map of the scenario")
+        .style("display", "block")
+        .style("width", "100%")
+        .style("height", "auto")
+        .style("background", PAPER)
+        .style("border", `1px solid ${RULE}`)
+        .style("border-radius", compact ? "3px" : null)
+        .style("cursor", compact ? null : "grab")
+        .style("touch-action", compact ? null : "none");
+      const hatch = svg
+        .append("defs")
+        .append("pattern")
+        .attr("id", hatchId)
+        .attr("patternUnits", "userSpaceOnUse")
+        .attr("width", 10)
+        .attr("height", 10);
+      hatch
+        .append("rect")
+        .attr("width", 10)
+        .attr("height", 10)
+        .attr("fill", PALETTE.water)
+        .attr("fill-opacity", 0.08);
+      hatch
+        .append("path")
+        .attr("d", "M0,5 Q2.5,2 5,5 T10,5")
+        .attr("fill", "none")
+        .attr("stroke", PALETTE.water)
+        .attr("stroke-width", 0.8);
+      const view = svg.append("g");
+      const hud = svg
+        .append("g")
+        .attr("font-size", compact ? 11 : 12)
+        .attr("font-family", "var(--sans-serif)")
+        .attr("fill", "var(--theme-foreground)");
+
+      function render(transform) {
+        fitted
+          .scale(transform.k * baseScale)
+          .translate([
+            transform.applyX(baseTranslate[0]),
+            transform.applyY(baseTranslate[1])
+          ]);
+        const k = fitted.scale();
+        const [tx, ty] = fitted.translate();
+        const X = (x) => x * k + tx;
+        const Y = (y) => ty - y * k;
+        const toPath = d3.geoPath(fitted).digits(1);
+        const pathOf = (coords, close = false) =>
+          toPath(
+            close
+              ? {type: "Polygon", coordinates: [closeRing(coords)]}
+              : {type: "LineString", coordinates: coords}
+          );
+        const draw = (style, type, coordinates) =>
+          applyStyle(
+            view.append("path").attr("d", toPath({type, coordinates})),
+            style
+          );
+        const show = (layer) => layers.includes(layer);
+        view.selectAll("*").remove();
+
+        if (show("Water")) draw(waterStyle, "MultiPolygon", waterXY);
+        if (show("Territory"))
+          draw(MAP_STYLE.territory, "MultiPolygon", territoryXY);
+
+        underlay?.({view, X, Y, k, pathOf, show});
+
+        if (show("Access routes"))
+          draw(MAP_STYLE.route, "MultiLineString", routesXY);
+        if (show("Tracks and implied paths")) {
+          draw(MAP_STYLE.track, "MultiLineString", trackXY);
+          draw(MAP_STYLE.implied, "MultiLineString", impliedXY);
+        }
+
+        overlay?.({view, X, Y, k, pathOf, show});
+
+        if (show("Observations")) {
+          const dots = applyStyle(view.append("g"), MAP_STYLE.observation);
+          const circles = dots
+            .selectAll("circle")
+            .data(observations)
+            .join("circle")
+            .attr("cx", (record) => X(record.xy[0][0]))
+            .attr("cy", (record) => Y(record.xy[0][1]))
+            .attr("r", dotRadius);
+          if (!compact)
+            circles
+              .append("title")
+              .text(
+                (record) =>
+                  `device ${record.device}, ${new Date(record.time).toISOString().slice(0, 16).replace("T", " ")}`
+              );
+        }
+
+        hud.selectAll("*").remove();
+        const barM =
+          SCALE_BAR_STEPS.filter((m) => m * k <= barMaxPx).pop() ??
+          SCALE_BAR_STEPS[0];
+        hud
+          .append("rect")
+          .attr("x", 12)
+          .attr("y", height - 34)
+          .attr("width", barM * k + 16)
+          .attr("height", 24)
+          .attr("fill", PAPER)
+          .attr("opacity", 0.85);
+        hud
+          .append("line")
+          .attr("x1", 20)
+          .attr("x2", 20 + barM * k)
+          .attr("y1", height - 20)
+          .attr("y2", height - 20)
+          .attr("stroke", "var(--theme-foreground)")
+          .attr("stroke-width", 2);
+        hud
+          .append("text")
+          .attr("x", 20)
+          .attr("y", height - 24)
+          .text(barM >= 1000 ? `${barM / 1000} km` : `${barM} m`);
+        hud.append("text").attr("x", 12).attr("y", 18).text(title);
+      }
+
+      if (!compact) {
+        const zoom = d3
+          .zoom()
+          .scaleExtent([0.2, 400])
+          .on("zoom", (event) => render(event.transform));
+        svg
+          .call(zoom)
+          .on("dblclick.zoom", null)
+          .on("dblclick", () =>
+            svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity)
+          );
+      }
+      render(d3.zoomIdentity);
+      if (compact) return svg.attr("class", "compact").node();
+
+      // Only user gestures are reported, so linked maps do not echo each other's moves.
+      const zoom = d3
+        .zoom()
+        .scaleExtent([0.2, 400])
+        .on("zoom", (event) => {
+          render(event.transform);
+          if (event.sourceEvent) onZoom?.(event.transform);
+        });
+      svg
+        .call(zoom)
+        .on("dblclick.zoom", null)
+        .on("dblclick", () => {
+          svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
+          onZoom?.(d3.zoomIdentity);
+        });
+      const zoomTo = (transform) => svg.call(zoom.transform, transform);
+
+      const container = d3.create("div").attr("class", "explorer-map");
+      container.append(() => svg.node());
+      const legendNode = container
+        .append("div")
+        .style("display", "flex")
+        .style("flex-wrap", "wrap")
+        .style("gap", "4px 18px")
+        .style("font", "13px var(--sans-serif)")
+        .style("margin-top", "6px");
+      const entries = [
+        {...MAP_STYLE.observation, label: "observation"},
+        {...MAP_STYLE.track, label: "recorded track"},
+        {...MAP_STYLE.implied, label: "implied path"},
+        {...MAP_STYLE.territory, label: "territory"},
+        {
+          ...MAP_STYLE.route,
+          label:
+            "access route (river, road, footpath or loop) the records were collected along"
+        },
+        {...waterStyle, label: "water"},
+        ...legend
+      ];
+      for (const entry of entries) legendNode.append(() => legendEntry(entry));
+      return Object.assign(container.node(), {zoomTo});
+    }
+  </script>
+  <script id="9" type="text/markdown">
+    ## Colours and styles
+  </script>
+  <script id="11" type="module" pinned="">
+    const PALETTE = {
+      observation: "#000000",
+      track: "#0072B2",
+      footprint: "#56B4E9",
+      keptHull: "#D55E00",
+      droppedHull: "#7f7f7f",
+      spanning: "#009E73",
+      territory: "#555555",
+      route: "#555555",
+      water: "#0072B2",
+    };
+
+    const PAPER = "var(--theme-background-alt)";
+    const RULE = "var(--theme-foreground-faintest)";
+
+    const MAP_STYLE = {
+      observation: {
+        shape: "dot",
+        fill: PALETTE.observation,
+        stroke: PAPER,
+        "stroke-width": 0.6,
+      },
+      track: {
+        shape: "line",
+        fill: "none",
+        stroke: PALETTE.track,
+        "stroke-width": 2,
+        "stroke-linecap": "round",
+      },
+      implied: {
+        shape: "line",
+        fill: "none",
+        stroke: PALETTE.track,
+        "stroke-width": 1.6,
+        "stroke-dasharray": "3 4",
+        "stroke-linecap": "round",
+      },
+      territory: {
+        shape: "area",
+        fill: PALETTE.territory,
+        "fill-opacity": 0.12,
+        stroke: PALETTE.territory,
+        "stroke-width": 1.2,
+        "stroke-dasharray": "10 4 2 4",
+      },
+      route: {
+        shape: "wiggle",
+        fill: "none",
+        stroke: PALETTE.route,
+        "stroke-width": 1,
+        "stroke-dasharray": "1.5 3",
+        "stroke-linecap": "round",
+      },
+      water: { shape: "area", stroke: PALETTE.water, "stroke-width": 1 },
+    };
+
+    const BASE_LAYERS = [
+      "Observations",
+      "Tracks and implied paths",
+      "Access routes",
+      "Territory",
+      "Water",
+    ];
+
+    const SCALE_BAR_STEPS = [
+      100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000,
+    ];
+
+  </script>
+  <script id="14" type="text/markdown">
+    ## Legend
+  </script>
+  <script id="16" type="module" pinned="">
+    const SWATCH_SHAPE = {
+      line: "M2,7L32,7",
+      area: "M2,1H32V13H2Z",
+      wiggle: "M2,10Q10,2 17,8T32,5",
+      triangle: "M2,13L17,1L32,13Z",
+    };
+
+    function applyStyle(selection, { shape, label, ...attributes }) {
+      for (const [name, value] of Object.entries(attributes))
+        selection.attr(name, value);
+      return selection;
+    }
+
+    function swatch(style) {
+      const sample = d3
+        .create("svg")
+        .attr("width", 34)
+        .attr("height", 14)
+        .attr("viewBox", "0 0 34 14")
+        .attr("aria-hidden", "true")
+        .style("flex", "none");
+      const mark =
+        style.shape === "dot"
+          ? sample.append("circle").attr("cx", 17).attr("cy", 7).attr("r", 2.4)
+          : sample.append("path").attr("d", SWATCH_SHAPE[style.shape ?? "line"]);
+      applyStyle(mark, style);
+      return sample.node();
+    }
+
+    function legendEntry(style) {
+      const entry = d3
+        .create("span")
+        .style("display", "inline-flex")
+        .style("align-items", "center")
+        .style("gap", "6px")
+        .style("white-space", "nowrap");
+      entry.append(() => swatch(style));
+      entry.append("span").text(style.label);
+      return entry.node();
+    }
+
+  </script>
+  <script id="21" type="text/markdown">
+    ## Fitting to viewport
+  </script>
+  <script id="22" type="module" pinned="">
+    const FIT_PADDING = 1.15;
+    const FIT_MIN_SPAN_M = 1000;
+
+    // A GeoJSON ring repeats its first point at the end, and d3 drops the last
+    // point of a ring on the assumption that it is that repeat, so an open ring
+    // loses a vertex.
+    function closeRing(ring) {
+      const [first] = ring;
+      const last = ring[ring.length - 1];
+      return !ring.length || (first[0] === last[0] && first[1] === last[1])
+        ? ring
+        : [...ring, first];
+    }
+
+    function fitPlane(pointsM, width, height) {
+      const [x0 = -500, x1 = 500] = d3.extent(pointsM, (p) => p[0]);
+      const [y0 = -500, y1 = 500] = d3.extent(pointsM, (p) => p[1]);
+      const half = (Math.max(x1 - x0, y1 - y0, FIT_MIN_SPAN_M) * FIT_PADDING) / 2;
+      const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+      const square = {
+        type: "MultiPoint",
+        coordinates: [
+          [cx - half, cy - half],
+          [cx + half, cy + half],
+        ],
+      };
+      return d3.geoIdentity().reflectY(true).fitSize([width, height], square);
+    }
+
+  </script>
+  <script id="23" type="module" pinned="">
+    const EXPLORER_CSS = `
+      .explorer-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 28px; align-items: start; margin: 4px 0 12px; }
+      .explorer-controls h3 { grid-column: 1 / -1; margin: 10px 0 2px; font-size: 15px; }
+      .explorer-controls form { margin: 2px 0; }
+      .explorer-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr); gap: 24px; align-items: start; }
+      @media (max-width: 960px) { .explorer-layout { grid-template-columns: 1fr; } }
+      .explorer-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+      .explorer-results { font-size: 14px; }
+      .explorer-results table, .explorer-table { max-width: none; }
+      .explorer-results th { vertical-align: top; padding-right: 12px; }
+      .explorer-results .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .explorer-results .big { font-size: 20px; font-weight: 600; }
+      .explorer-results .dropped { color: var(--theme-foreground-muted); }
+      .explorer-table th, .explorer-table td { text-align: right; font-variant-numeric: tabular-nums; }
+      .explorer-table th:first-child, .explorer-table td:first-child { text-align: left; }
+      .explorer-table tr.current { background: var(--theme-background-alt); font-weight: 600; }
+      .explorer-note { font-size: 14px; color: var(--theme-foreground-muted); max-width: none; }
+      .explorer-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px 12px; margin: 8px 0 16px; }
+      .explorer-gallery figure { margin: 0; cursor: pointer; }
+      .explorer-gallery figure.current { outline: 2px solid ${PALETTE.keptHull}; outline-offset: 3px; }
+      .explorer-gallery figcaption { max-width: none; line-height: 1.35; }
+    `;
+  </script>
+</notebook>

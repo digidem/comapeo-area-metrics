@@ -1,0 +1,998 @@
+<!doctype html>
+<notebook theme="air">
+  <title>CoMapeo Area Metrics: Extent</title>
+  <script id="1" type="text/markdown">
+    # CoMapeo Area Metrics: Extent
+
+    The "extent" of CoMapeo mapping and monitoring data is an estimate of the territory a project team works in. In contrast, the [footprint](./footprint) counts only the ground within a short distance of each record; the extent also fills the gaps between records at a site, so it is the upper figure for "area mapped and monitored by CoMapeo". It must not bridge between separate sites, and it must not be inflated by stray records such as a training day outside the territory or a bad GPS fix.
+
+    The estimate has five steps, each explained with its code below:
+
+    1. **Grow.** Every observation and track is grown by half the _linking distance_.
+    2. **Clusters.** Each separate piece of the grown shape is a cluster.
+    3. **Encircled ground.** Ground the grown shape surrounds on all sides is filled in, up to a chosen size.
+    4. **Shrink.** The shape is shrunk back by half the linking distance less the _margin_. Ground survives where grown records overlapped enough to fill the gap between them.
+    5. **Keep or drop.** A cluster far from the largest is dropped as stray unless the team recorded there on at least three separate days and its records span more than a kilometre. The extent is the area of the kept clusters.
+
+    The data comes from the randomly generated [scenarios](./scenarios). Pick one to see its extent on the map below.
+
+  </script>
+  <script id="43" type="module">
+    const scenarioSpec = view(
+      Inputs.select(scenarioCatalogue, {
+        label: "Scenario",
+        format: (spec) => spec.name
+      })
+    );
+  </script>
+  <script id="42" type="text/markdown">
+    **${scenario.name}.** ${scenario.tests}
+  </script>
+  <script id="22" type="module">
+    const keptStyle = {
+      shape: "area",
+      fill: PALETTE.keptHull,
+      "fill-opacity": 0.18,
+      stroke: PALETTE.keptHull,
+      "stroke-width": 1.4
+    };
+    const droppedStyle = {
+      shape: "area",
+      fill: "none",
+      stroke: PALETTE.droppedHull,
+      "stroke-width": 1.4,
+      "stroke-dasharray": "2 4"
+    };
+    const grownStyle = {
+      shape: "area",
+      fill: "none",
+      stroke: PALETTE.droppedHull,
+      "stroke-width": 0.8,
+      "stroke-dasharray": "4 3"
+    };
+
+    view(scenarioMap({
+      toMetres: extent.projection.toMetres,
+      xyRecords: extent.xyRecords,
+      scenario,
+      title: `${scenario.name}. Drag to pan, wheel to zoom, double-click to fit.`,
+      overlay: drawClusters,
+      legend: [
+        {...keptStyle, label: "kept cluster extent"},
+        {...droppedStyle, label: "dropped cluster"},
+        ...(showGrown
+          ? [{...grownStyle, label: "grown shape, before shrinking"}]
+          : [])
+      ]
+    }))
+
+
+    function drawClusters({view, X, Y, k}) {
+      const pathOf = (segments) =>
+        segments
+          .map(
+            ([[ax, ay], [bx, by]]) =>
+              `M${X(ax).toFixed(1)},${Y(ay).toFixed(1)}L${X(bx).toFixed(1)},${Y(by).toFixed(1)}`
+          )
+          .join("");
+      if (showGrown)
+        applyStyle(view.append("path"), grownStyle).attr(
+          "d",
+          pathOf(extent.grownOutline)
+        );
+      for (const cluster of extent.clusters) {
+        const style = cluster.kept ? keptStyle : droppedStyle;
+        if (cluster.kept) {
+          view
+            .append("g")
+            .attr("fill", style.fill)
+            .attr("fill-opacity", style["fill-opacity"])
+            .selectAll("rect")
+            .data(cluster.runs)
+            .join("rect")
+            .attr("x", (run) => X(run.x1))
+            .attr("y", (run) => Y(run.y2))
+            .attr("width", (run) => (run.x2 - run.x1) * k)
+            .attr("height", (run) => (run.y2 - run.y1) * k);
+        }
+        applyStyle(view.append("path"), {...style, fill: "none"}).attr(
+          "d",
+          pathOf(cluster.outline)
+        );
+        view
+          .append("text")
+          .attr("x", X(cluster.centroid[0]) + 6)
+          .attr("y", Y(cluster.centroid[1]) - 6)
+          .attr("font-size", 11)
+          .attr("font-family", "var(--sans-serif)")
+          .attr("fill", style.stroke)
+          .attr("stroke", PAPER)
+          .attr("stroke-width", 3)
+          .attr("paint-order", "stroke")
+          .text(
+            cluster.kept
+              ? `cluster ${cluster.id}`
+              : `cluster ${cluster.id} dropped: ${cluster.reason}`
+          );
+      }
+    }
+
+  </script>
+  <script id="26" type="text/markdown">
+    - **Extent: ${extentKm2.toFixed(2)} km²**, the sum of ${keptClusters.length} kept cluster${keptClusters.length === 1 ? "" : "s"} out of ${extent.clusters.length}, from ${d3.sum(keptClusters, (cluster) => cluster.cellCount).toLocaleString()} cells of ${cellSize} m.
+    - **Territory: ${scenario.territoryKm2.toFixed(2)} km²**. ${scenario.territoryKm2 > 0 ? `The extent covers ${((100 * extentKm2) / scenario.territoryKm2).toFixed(1)} % of it.` : "This scenario has no territory."}
+    - **Records:** ${recordCount("point")} observations and ${recordCount("track")} tracks, plus ${recordCount("implied")} implied paths.
+    - **Compute time:** ${elapsedMs.toFixed(0)} ms.
+  </script>
+  <script id="41" type="text/markdown">
+
+    The linking distance is our assumption about how far two points can be and still be counted as "the same place". Observations and tracks within ${linkingKm}km grow the territory; further apart and they count as two separate areas of territory.
+  </script>
+  <script id="40" type="module">
+    const linkingKm = view(
+      Inputs.range([0.5, 20], {
+        label: "Linking distance (km)",
+        step: 0.5,
+        value: 5
+      })
+    );
+  </script>
+  <script id="39" type="text/markdown">
+    The margin is how far beyond the closed shape the extent reaches, on the assumption that a team sees some distance beyond the points it records.
+  </script>
+  <script id="38" type="module">
+    const marginM = view(
+      Inputs.range([0, 1000], {
+        label: "Margin (m)",
+        step: 50,
+        value: 500
+      })
+    );
+  </script>
+  <script id="37" type="text/markdown">
+    The size of hole in the data that we still count as area monitored. Sometimes a team's records form a ring with nothing inside: a patrol loop, or a sacred site that people walk around but never enter. If the records are close enough together that the ring closes, the ground inside is encircled. This control sets the largest encircled area that still counts as part of the extent. Above it, the hole stays open.
+  </script>
+  <script id="36" type="module">
+    const holeKm2 = view(
+      Inputs.range([0, 400], {
+        label: "Fill encircled ground up to (km²)",
+        step: 5,
+        value: 25
+      })
+    );
+  </script>
+  <script id="35" type="text/markdown">
+    Stray clusters with records on fewer than three separate days and across less than 1km are ignored if they are more than ${strayKm}km from the rest of the data. This avoids points from trainings or random points taken during trips outside territory by the team distorting the area figure, while still counting distinct areas of territory that could be further apart.
+  </script>
+  <script id="34" type="module">
+    const strayKm = view(
+      Inputs.range([10, 300], {
+        label: "Stray cluster distance (km)",
+        step: 10,
+        value: 50
+      })
+    );
+  </script>
+  <script id="25" type="module">
+    Inputs.table(
+      extent.clusters.map((cluster) => ({
+        cluster: cluster.id,
+        records: cluster.records,
+        days: cluster.days,
+        "across (km)": cluster.spanM / 1e3,
+        "km²": cluster.area / 1e6,
+        status: cluster.kept
+          ? cluster.id === 1
+            ? "kept (largest, always kept)"
+            : "kept"
+          : `dropped: ${cluster.reason}`,
+      })),
+      {
+        format: {
+          "km²": (area) => area.toFixed(2),
+          "across (km)": (km) => km.toFixed(1),
+        },
+        select: false,
+      },
+    )
+  </script>
+  <script id="33" type="text/markdown">
+    The grid resolution for growing and shrinking. Smaller cells give a more accurate area and a slower calculation.
+  </script>
+  <script id="32" type="module">
+    const cellSize = view(
+      Inputs.range([50, 500], {
+        label: "Cell size (m)",
+        step: 50,
+        value: 100
+      })
+    );
+  </script>
+  <script id="31" type="text/markdown">
+    Implied paths join consecutive observations by the same device on the same day, closer than 2 hours and 2 km apart, into a path that is grown like a track.
+  </script>
+  <script id="30" type="module">
+    const impliedPaths = view(Inputs.toggle({label: "Implied paths", value: true}));
+  </script>
+  <script id="29" type="text/markdown">
+    Change the seed to see different randomly generated data for the scenarios.
+  </script>
+  <script id="28" type="module">
+    const seed = view(
+      Inputs.number([0, 999999], {
+        label: "Seed",
+        value: 1,
+        step: 1
+      })
+    );
+  </script>
+  <script id="24" type="text/markdown">
+    The map fills each kept cluster's extent and outlines dropped clusters with dots. Turn on the grown shape to see the ground before shrinking: every record grown by half the linking distance, with any filled holes.
+  </script>
+  <script id="23" type="module">
+    const showGrown = view(
+      Inputs.toggle({label: "Show grown shape", value: false})
+    );
+  </script>
+  <script id="20" type="text/markdown">
+    ## Growing and shrinking, in pictures
+  </script>
+  <script id="18" type="text/markdown">
+    ### Grow
+
+    Every record is grown by half the linking distance. Records closer than the linking distance merge into one shape. The large ring keeps a hole, because a disc of half the linking distance still fits inside it; the small ring does not.
+  </script>
+  <script id="17" type="module">
+    panel(
+      "Grown by half the linking distance",
+      closingExtent(figureRecords, {...figureOptions, marginM: 0}).grown.runs
+    )
+  </script>
+  <script id="16" type="text/markdown">
+    ### Shrink
+
+    The shape is shrunk back by the same amount. That takes away everything the growing added, except where grown records overlapped and left nothing for the shrink to work from. The arms stay joined where they are within a linking distance of each other, and the web recedes where they diverge. The small ring is filled.
+  </script>
+  <script id="15" type="module">
+    panel(
+      "Shrunk back by the same: the closing",
+      closingExtent(figureRecords, {
+        ...figureOptions,
+        marginM: 0
+      }).clusters.flatMap((cluster) => cluster.runs)
+    )
+  </script>
+  <script id="14" type="text/markdown">
+    ### The margin
+
+    Actual shrink is half the linking distance minus the margin.
+  </script>
+  <script id="13" type="module">
+    panel(
+      "Shrunk back by less: the margin",
+      closingExtent(figureRecords, {
+        ...figureOptions,
+        marginM: 0.15
+      }).clusters.flatMap((cluster) => cluster.runs)
+    )
+  </script>
+  <script id="12" type="text/markdown">
+    ### Filling encircled ground
+
+    With encircled ground up to 4 square units filled, the large ring's interior, about 3.1 square units as the ring sees it, is added to the grown shape before shrinking, and the ring comes out solid. The web between the arms is unchanged, because open ground is not encircled.
+  </script>
+  <script id="11" type="module">
+    panel(
+      "Encircled ground filled before shrinking",
+      closingExtent(figureRecords, {
+        ...figureOptions,
+        marginM: 0.15,
+        maxHoleM2: 4
+      }).clusters.flatMap((cluster) => cluster.runs)
+    )
+  </script>
+  <script id="19" type="module">
+    const ringAt = ([cx, cy], radius, count) =>
+      d3.range(count).map((i) => {
+        const angle = (i / count) * 2 * Math.PI;
+        return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+      });
+    const arms = [0.45, -0.45].flatMap((bend) =>
+      d3.range(8).map((i) => [2.6 + i * 0.45, bend * i * 0.45])
+    );
+    const figurePoints = [
+      ...ringAt([-2.4, 0], 0.4, 8),
+      ...ringAt([0, 0], 1, 12),
+      ...arms
+    ];
+    const figureRecords = figurePoints.map((xy) => ({kind: "point", xy: [xy]}));
+    const figureOptions = {linkM: 1.5, cellSize: 0.02, strayKm: Infinity};
+
+    function panel(title, runs) {
+      return Plot.plot({
+        width: Math.min(width, 960),
+        aspectRatio: 1,
+        margin: 10,
+        inset: 16,
+        x: {axis: null},
+        y: {axis: null},
+        marks: [
+          Plot.frame({stroke: "var(--theme-foreground-faintest)"}),
+          Plot.rect(runs, {
+            x1: "x1",
+            x2: "x2",
+            y1: "y1",
+            y2: "y2",
+            fill: PALETTE.keptHull,
+            fillOpacity: 0.35
+          }),
+          Plot.dot(figurePoints, {
+            x: (p) => p[0],
+            y: (p) => p[1],
+            fill: "currentColor"
+          }),
+          Plot.text([title], {frameAnchor: "top-left", dx: 6, dy: 6})
+        ]
+      });
+    }
+  </script>
+  <script id="10" type="text/markdown">
+    ## How the extent is calculated
+
+    Records are stored as longitude and latitude. `extentOf` builds the record list for a scenario (observations, tracks and implied paths), projects it into metres, and hands it to `closingExtent`, which does the estimate. From here on every length is in metres and every area in square metres.
+  </script>
+  <script id="9" type="text/x-typescript" pinned="">
+    function extentOf(
+      scenario: Scenario,
+      {linkingKm, marginM, holeKm2, cellSize, strayKm, impliedPaths}: ExtentOptions
+    ) {
+      const records = buildRecords(scenario, {impliedPaths});
+      const {projection, xyRecords} = projectRecords(records);
+      const extent = closingExtent(xyRecords, {
+        linkM: linkingKm * 1000,
+        marginM,
+        maxHoleM2: holeKm2 * 1e6,
+        cellSize,
+        strayKm
+      });
+      return {...extent, records, projection, xyRecords};
+    }
+  </script>
+  <script id="44" type="text/markdown">
+    `closingExtent` runs the five steps from the top of the page. The result is the list of clusters, each marked kept or dropped with the reason, and the extent: the area of the kept clusters. The last line adds the rectangles and outlines the map draws; they play no part in the calculation.
+  </script>
+  <script id="45" type="text/x-typescript" pinned="">
+    function closingExtent(
+      records: XyRecord[],
+      {linkM, marginM, cellSize, maxHoleM2 = 0, strayKm}: ClosingOptions
+    ): Extent {
+      const growM = linkM / 2;
+      const shrinkM = Math.max(0, growM - marginM);
+
+      const painted = Raster.fromGrid(grow(records, {growM, cellSize}));
+      const clusters = numberClusters(painted);
+      const filled = fillEncircledGround(painted, clusters, {maxHoleM2, growM});
+      const removed = shrink(filled, shrinkM);
+      const measured = measureClusters(filled, removed, records);
+      const shapes = shapesForMap(filled, removed, measured);
+      const ranked = keepOrDrop(shapes.clusters, strayKm);
+
+      const area = ranked.reduce(
+        (sum, cluster) => sum + (cluster.kept ? cluster.area : 0),
+        0
+      );
+      return {area, clusters: ranked, grown: shapes.grown};
+    }
+  </script>
+  <script id="46" type="text/markdown">
+    ### 1. Grow
+
+    Growing uses the same algorithm as [footprint](./footprint) to create a grid of covered cells, using half the linking distance as the buffer. Two records exactly a linking distance apart end up just touching, so once everything is painted, records within the linking distance of each other have merged into one connected shape.
+  </script>
+  <script id="47" type="text/x-typescript" pinned="">
+    function grow(
+      records: XyRecord[],
+      {growM, cellSize}: {growM: number; cellSize: number}
+    ): Grid {
+      const grown = new Grid(cellSize);
+      for (const record of records) {
+        const line = simplifyLine(record.xy, cellSize / 2);
+        for (const point of line) grown.markDisc(point, growM);
+        for (let i = 1; i < line.length; i++)
+          grown.markBand(line[i - 1], line[i], growM);
+      }
+      return grown;
+    }
+  </script>
+  <script id="49" type="text/markdown">
+    ### Raster
+
+    The `Grid` is used for initially marking the area and is sparse, which is necessary for bounding memory usage when streaming records without knowing the extent first. The `Raster` is a fixed-size grid mapped onto a 1-dimensional array. The `Raster` is used for identifying connected cells for clusters; finding neighbours; and filling areas.
+  </script>
+  <script id="52" type="text/x-typescript" pinned="">
+    class Raster<Cells extends Uint8Array | Int32Array> {
+      readonly frame: Frame;
+      readonly cells: Cells;
+
+      /** A raster of zeros on the frame, holding a typed array of the given kind. */
+      constructor(frame: Frame, type: new (length: number) => Cells) {
+        this.frame = frame;
+        this.cells = new type(frame.rows * frame.cols);
+      }
+
+      /** The grid's painted cells, on a frame sized around them with a one-cell border. */
+      static fromGrid(grid: Grid): Raster<Uint8Array> {
+        const {cellSize} = grid;
+        let [rowMin, rowMax, colMin, colMax] = [
+          Infinity,
+          -Infinity,
+          Infinity,
+          -Infinity
+        ];
+        for (const [row, words] of grid.wordsByRow) {
+          rowMin = Math.min(rowMin, row);
+          rowMax = Math.max(rowMax, row);
+          for (const [word, bits] of words) {
+            colMin = Math.min(colMin, word * WORD + lowestBit(bits));
+            colMax = Math.max(colMax, word * WORD + highestBit(bits));
+          }
+        }
+        if (rowMin > rowMax) [rowMin, rowMax, colMin, colMax] = [0, -1, 0, -1];
+        const frame = {
+          rows: rowMax - rowMin + 3,
+          cols: colMax - colMin + 3,
+          cellSize,
+          row0: rowMin - 1,
+          col0: colMin - 1
+        };
+        const painted = new Raster(frame, Uint8Array);
+        for (const cell of cellsOf(grid.wordsByRow))
+          painted.cells[painted.#indexOf(cell)] = 1;
+        return painted;
+      }
+
+      /** The number of cells, the length of `cells`. */
+      get size(): number {
+        return this.cells.length;
+      }
+
+      /** The value of the cell under a point in metres, or 0 outside the frame. */
+      at([x, y]: Point): number {
+        const {rows, cols, cellSize, row0, col0} = this.frame;
+        const [row, col] = [Math.floor(y / cellSize), Math.floor(x / cellSize)];
+        if (row < row0 || row >= row0 + rows || col < col0 || col >= col0 + cols)
+          return 0;
+        return this.cells[this.#indexOf([row, col])];
+      }
+
+      /** The centre of the cell at an index, in metres. */
+      centreOf(index: number): Point {
+        const [row, col] = this.#cellOf(index);
+        return [
+          (col + 0.5) * this.frame.cellSize,
+          (row + 0.5) * this.frame.cellSize
+        ];
+      }
+
+      /** The square the cell at an index covers, in metres. */
+      squareOf(index: number): Rect {
+        const [row, col] = this.#cellOf(index);
+        const {cellSize} = this.frame;
+        return {
+          x1: col * cellSize,
+          y1: row * cellSize,
+          x2: (col + 1) * cellSize,
+          y2: (row + 1) * cellSize
+        };
+      }
+
+      /** Calls `visit` with the index of each cell above, below, left and right of a cell, leaving out any beyond the frame. */
+      forEachNeighbour(index: number, visit: (neighbour: number) => void): void {
+        const {cols} = this.frame;
+        const col = index % cols;
+        if (index >= cols) visit(index - cols);
+        if (index + cols < this.size) visit(index + cols);
+        if (col > 0) visit(index - 1);
+        if (col < cols - 1) visit(index + 1);
+      }
+
+      /** The first non-zero value among a cell's neighbours, or 0 if all are zero. */
+      neighbourValue(index: number): number {
+        let value = 0;
+        this.forEachNeighbour(index, (neighbour) => {
+          if (!value) value = this.cells[neighbour];
+        });
+        return value;
+      }
+
+      /** Sets to 1 every cell within `r` metres of the line between the centres of the cells at `start` and `end`, which must lie in one row. */
+      markNear(start: number, end: number, r: number): void {
+        const {cellSize} = this.frame;
+        const [cxStart, cy] = this.centreOf(start);
+        const [cxEnd] = this.centreOf(end);
+        const [firstRow, lastRow] = this.#centredBetween(cy - r, cy + r);
+        for (let row = firstRow; row <= lastRow; row++) {
+          const y = (row + 0.5) * cellSize;
+          const halfChord = Math.sqrt(Math.max(r * r - (y - cy) ** 2, 0));
+          this.#markRow(row, cxStart - halfChord, cxEnd + halfChord);
+        }
+      }
+
+      // The first and last row or column whose centre lies between two coordinates in metres.
+      #centredBetween(from: number, to: number): [first: number, last: number] {
+        const {cellSize} = this.frame;
+        return [Math.ceil(from / cellSize - 0.5), Math.floor(to / cellSize - 0.5)];
+      }
+
+      #indexOf([row, col]: Cell): number {
+        const {row0, col0, cols} = this.frame;
+        return (row - row0) * cols + (col - col0);
+      }
+
+      #cellOf(index: number): Cell {
+        const {row0, col0, cols} = this.frame;
+        return [row0 + Math.floor(index / cols), col0 + (index % cols)];
+      }
+
+      // The footprint grid's row painting: the cells of grid row `row` whose centres lie between `left` and `right` metres.
+      #markRow(row: number, left: number, right: number): void {
+        const {rows, cols, cellSize, row0, col0} = this.frame;
+        if (row < row0 || row >= row0 + rows) return;
+        const first = Math.max(Math.ceil(left / cellSize - 0.5), col0);
+        const last = Math.min(Math.floor(right / cellSize - 0.5), col0 + cols - 1);
+        if (first > last) return;
+        const base = (row - row0) * cols - col0;
+        this.cells.fill(1, base + first, base + last + 1);
+      }
+    }
+
+    const lowestBit = (bits: number): number => 31 - Math.clz32(bits & -bits);
+    const highestBit = (bits: number): number => 31 - Math.clz32(bits);
+  </script>
+  <script id="54" type="text/markdown">
+    ### 2. Clusters
+
+    A cluster is one connected piece of the grown shape, and `regions` finds connected pieces by a flood fill: Start at any cell that has the wanted value (`0` or `1`) and no id yet, give it the next id, and spread to its neighbours (horizontally and vertically, not diagonally) with the same value, then to their neighbours, until nothing more can be reached. Start again at the next cell without an id for the next id, and so on until none is left.
+
+    The spreading uses a queue: every cell given the id is added at the back, and cells are taken from the front to have their four neighbours checked. When the front catches up with the back the region is complete, and the number of cells added is its size.
+
+    `numberClusters` runs this over the painted cells, step 3 (encircle) does the same for unpainted cells (gaps).
+  </script>
+  <script id="55" type="text/x-typescript" pinned="">
+    function regions(painted: Raster<Uint8Array>, value: 0 | 1): Regions {
+      const {cells, size} = painted;
+      const ids = new Raster(painted.frame, Int32Array);
+      const queue = new Int32Array(size);
+      const sizes = [0];
+      let id = 0;
+      let tail = 0;
+      const claim = (index: number) => {
+        if (ids.cells[index] || cells[index] !== value) return;
+        ids.cells[index] = id;
+        queue[tail++] = index;
+      };
+      for (let start = 0; start < size; start++) {
+        if (ids.cells[start] || cells[start] !== value) continue;
+        id = sizes.length;
+        tail = 0;
+        claim(start);
+        for (let head = 0; head < tail; head++)
+          ids.forEachNeighbour(queue[head], claim);
+        sizes.push(tail);
+      }
+      return {ids, sizes};
+    }
+
+    function numberClusters(painted: Raster<Uint8Array>): Regions {
+      return regions(painted, 1);
+    }
+  </script>
+  <script id="56" type="text/markdown">
+    ### 3. Encircled ground
+
+    Running `regions` over the unpainted cells numbers each connected piece of open ground: the outside, which is the region holding the border, and any encircled gaps.
+
+    Growing has already covered a band of half the linking distance inside every gap, so a gap is measured as a disc and grown back by that distance. Any gap that comes to no more than ${holeKm2} km² is filled with the id of the cluster around it.
+  </script>
+  <script id="57" type="text/x-typescript" pinned="">
+    const encircledM2 = (gapM2: number, growM: number): number =>
+      Math.PI * (Math.sqrt(gapM2 / Math.PI) + growM) ** 2;
+
+    function fillEncircledGround(
+      painted: Raster<Uint8Array>,
+      clusters: Regions,
+      {maxHoleM2, growM}: {maxHoleM2: number; growM: number}
+    ): Regions {
+      const gaps = regions(painted, 0);
+      const outside = gaps.ids.cells[0];
+      const fill = gaps.sizes.map(
+        (cells, gap) =>
+          gap > 0 &&
+          gap !== outside &&
+          encircledM2(cells * painted.frame.cellSize ** 2, growM) <= maxHoleM2
+      );
+      if (!fill.includes(true)) return clusters;
+      const ids = new Raster(painted.frame, Int32Array);
+      ids.cells.set(clusters.ids.cells);
+      const sizes = [...clusters.sizes];
+      const around = new Int32Array(gaps.sizes.length);
+      for (let index = 0; index < ids.size; index++) {
+        const gap = gaps.ids.cells[index];
+        if (!fill[gap]) continue;
+        if (!around[gap]) around[gap] = clusters.ids.neighbourValue(index);
+        ids.cells[index] = around[gap];
+        sizes[around[gap]]++;
+      }
+      return {ids, sizes};
+    }
+  </script>
+  <script id="59" type="text/markdown">
+    ### 4. Shrink
+
+    Shrinking removes every cell within the shrink distance of open ground, which is half the linking distance less the margin. Rather than test every cell, open cells that touch the shape are grown by the shrinking distance with `markNear`, marking `1` for each painted cell they overlap.
+
+    The result of growing-then-shrinking is that the gaps between records within linking distance are filled.
+  </script>
+  <script id="60" type="text/x-typescript" pinned="">
+    function shrink({ids}: Regions, shrinkM: number): Raster<Uint8Array> {
+      const {rows, cols} = ids.frame;
+      const removed = new Raster(ids.frame, Uint8Array);
+      const touchesShape = (index: number) =>
+        ids.cells[index] === 0 && ids.neighbourValue(index) > 0;
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+          if (!touchesShape(r * cols + c)) continue;
+          const start = c;
+          while (c + 1 < cols && touchesShape(r * cols + c + 1)) c++;
+          removed.markNear(r * cols + start, r * cols + c, shrinkM);
+        }
+      return removed;
+    }
+  </script>
+  <script id="64" type="text/markdown">
+    ### 5. Keep or drop
+
+    `measureClusters` measures each cluster's area; centre (the mean of all its cells' centres); the number of records in the cluster; the number of separate days the records were created on; and the longest side of the bounding box around the records.
+  </script>
+  <script id="61" type="text/x-typescript" pinned="">
+    const DAY_MS = 86400000;
+
+    function measureClusters(
+      {ids, sizes}: Regions,
+      removed: Raster<Uint8Array>,
+      records: XyRecord[]
+    ): Measured[] {
+      const {cellSize} = ids.frame;
+      const count = sizes.length - 1;
+      const keptCells = new Int32Array(count + 1);
+      const sumX = new Float64Array(count + 1);
+      const sumY = new Float64Array(count + 1);
+      for (let index = 0; index < ids.size; index++) {
+        const id = ids.cells[index];
+        if (!id) continue;
+        const [x, y] = ids.centreOf(index);
+        sumX[id] += x;
+        sumY[id] += y;
+        if (!removed.cells[index]) keptCells[id]++;
+      }
+
+      const recordCount = new Int32Array(count + 1);
+      const days = Array.from({length: count + 1}, () => new Set<number>());
+      const box = Array.from({length: count + 1}, () => [
+        Infinity,
+        -Infinity,
+        Infinity,
+        -Infinity
+      ]);
+      for (const record of records) {
+        if (record.kind === "implied") continue;
+        const id = ids.at(record.xy[0]);
+        if (!id) continue;
+        recordCount[id]++;
+        days[id].add(Math.floor((record.time ?? 0) / DAY_MS));
+        for (const [x, y] of record.xy) {
+          box[id][0] = Math.min(box[id][0], x);
+          box[id][1] = Math.max(box[id][1], x);
+          box[id][2] = Math.min(box[id][2], y);
+          box[id][3] = Math.max(box[id][3], y);
+        }
+      }
+
+      return Array.from({length: count}, (_, i) => i + 1).map((id) => ({
+        cellCount: keptCells[id],
+        area: keptCells[id] * cellSize * cellSize,
+        centroid: [sumX[id] / sizes[id], sumY[id] / sizes[id]],
+        records: recordCount[id],
+        days: days[id].size,
+        spanM: recordCount[id]
+          ? Math.max(box[id][1] - box[id][0], box[id][3] - box[id][2])
+          : 0
+      }));
+    }
+  </script>
+  <script id="65" type="text/markdown">
+    Clusters are sorted by the number of records, and the one with the most records is always kept. Others are dropped if they are more than ${strayKm} km from cluster 1, centre to centre, and either recorded on fewer than three separate days or span less than a kilometre. This filters out stray data from training days or trips that is not part of a territory, but keeps additional areas where ongoing monitoring is done.
+  </script>
+  <script id="62" type="text/x-typescript" pinned="">
+    const STRAY_MIN_DAYS = 3;
+    const STRAY_MIN_SPAN_M = 1000;
+
+    function keepOrDrop(
+      clusters: (Measured & Traces)[],
+      strayKm: number
+    ): Cluster[] {
+      const ordered = clusters.toSorted(
+        (a, b) =>
+          b.records - a.records ||
+          a.centroid[0] - b.centroid[0] ||
+          a.centroid[1] - b.centroid[1]
+      );
+      const [largest] = ordered;
+      return ordered.map((cluster, index) => {
+        const reason = strayReason(cluster, largest, strayKm);
+        return {...cluster, id: index + 1, kept: !reason, reason};
+      });
+    }
+
+    function strayReason(
+      cluster: Measured,
+      largest: Measured,
+      strayKm: number
+    ): string | null {
+      if (cluster === largest) return null;
+      const distanceKm =
+        Math.hypot(
+          cluster.centroid[0] - largest.centroid[0],
+          cluster.centroid[1] - largest.centroid[1]
+        ) / 1000;
+      const stray =
+        distanceKm > strayKm &&
+        (cluster.days < STRAY_MIN_DAYS || cluster.spanM < STRAY_MIN_SPAN_M);
+      return stray
+        ? `${distanceKm.toFixed(0)} km from the largest cluster, ${cluster.days} day${cluster.days === 1 ? "" : "s"}, ${spanText(cluster.spanM)} across`
+        : null;
+    }
+
+    const spanText = (m: number): string =>
+      m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+  </script>
+  <script id="66" type="text/markdown">
+    ### Shapes for the map
+
+    These functions create outlines of each cluster for drawing on the map — they aren't necessary for the area calculations, just the visualisation.
+  </script>
+  <script id="63" type="text/x-typescript" pinned="">
+    function shapesForMap(
+      {ids}: Regions,
+      removed: Raster<Uint8Array>,
+      measured: Measured[]
+    ): Shapes {
+      const none: Traces = {runs: [], outline: []};
+      const traces = tracesOf(ids, (index) =>
+        removed.cells[index] ? 0 : ids.cells[index]
+      );
+      const grown =
+        tracesOf(ids, (index) => (ids.cells[index] ? 1 : 0)).get(1) ?? none;
+      return {
+        clusters: measured.map((cluster, i) => ({
+          ...cluster,
+          ...(traces.get(i + 1) ?? none)
+        })),
+        grown
+      };
+    }
+
+    function tracesOf(
+      raster: Raster<Int32Array>,
+      shapeOf: (index: number) => number
+    ): Map<number, Traces> {
+      const {rows, cols} = raster.frame;
+      const traces = new Map<number, Traces>();
+      for (let r = 0; r < rows; r++) {
+        let run: Rect | null = null;
+        let runShape = 0;
+        for (let c = 0; c < cols; c++) {
+          const index = r * cols + c;
+          const shape = shapeOf(index);
+          if (!shape) continue;
+          const {x1, y1, x2, y2} = raster.squareOf(index);
+          let trace = traces.get(shape);
+          if (!trace) traces.set(shape, (trace = {runs: [], outline: []}));
+          const {runs, outline} = trace;
+          if (run && runShape === shape && run.x2 === x1) run.x2 = x2;
+          else {
+            run = {x1, y1, x2, y2};
+            runShape = shape;
+            runs.push(run);
+          }
+          // A cell with a shape is never on the border, so all four neighbours are in the frame.
+          if (shapeOf(index - cols) !== shape)
+            outline.push([
+              [x1, y1],
+              [x2, y1]
+            ]);
+          if (shapeOf(index + cols) !== shape)
+            outline.push([
+              [x1, y2],
+              [x2, y2]
+            ]);
+          if (shapeOf(index - 1) !== shape)
+            outline.push([
+              [x1, y1],
+              [x1, y2]
+            ]);
+          if (shapeOf(index + 1) !== shape)
+            outline.push([
+              [x2, y1],
+              [x2, y2]
+            ]);
+        }
+      }
+      return traces;
+    }
+  </script>
+  <script id="4" type="text/markdown">
+    ## Memory and performance
+
+    Records can be streamed as they are painted onto the `Grid`, and grid memory usage is bounded by the number of cells covered by the territory, not by the number of records. Memory usage by `Raster` is tied to the size of the bounding box around the territory, but in the application code we create a separate raster per "island" of data to avoid a territory in the Amazon combined with some points during a workshop in Europe generating a giant raster encompassing both areas that would result in an out-of-memory error. The example scenarios use at most 12Mb of memory and take about 15ms (on a Macbook Pro M2) to calculate the extent — fast enough to run on a low-end phone.
+  </script>
+  <script id="53" type="text/markdown">
+    ## Types
+  </script>
+  <script id="48" type="text/x-typescript" pinned="">
+    type Point = [x: number, y: number];
+
+    /** The parts of a scenario that `buildRecords` reads. */
+    interface Scenario {
+      points: {lon: number; lat: number; time: number; device: string}[];
+      tracks: {
+        coords: [lon: number, lat: number][];
+        time: number;
+        device: string;
+      }[];
+    }
+
+    interface ExtentOptions {
+      linkingKm: number;
+      marginM: number;
+      holeKm2: number;
+      cellSize: number;
+      strayKm: number;
+      impliedPaths: boolean;
+    }
+
+    /** A record projected into metres. */
+    interface XyRecord {
+      kind: "point" | "track" | "implied";
+      /** One point for an observation, the vertices for a track or an implied path. */
+      xy: Point[];
+      /** Milliseconds since the epoch. */
+      time?: number;
+    }
+
+    /** The options in metres, as `closingExtent` takes them. */
+    interface ClosingOptions {
+      linkM: number;
+      marginM: number;
+      cellSize: number;
+      /** Defaults to 0: no encircled ground is filled. */
+      maxHoleM2?: number;
+      strayKm: number;
+    }
+
+    /** row and a column of the grid, numbered from the origin of the projection. Its centre is at ((column + 0.5) * cellSize, (row + 0.5) * cellSize), and a cell is inside a shape when its centre is. */
+    type Cell = [row: number, column: number];
+
+    /** The rectangle a run's rasters cover: the grown shape with a one-cell border. Shared by every raster of the run. */
+    interface Frame {
+      rows: number;
+      cols: number;
+      cellSize: number;
+      /** The grid row and column of the first cell. */
+      row0: number;
+      col0: number;
+    }
+
+    /** Connected regions. `ids` holds a region id per cell, 0 where the cell is in no region; ids run from 1 in the order the regions are first met scanning row by row, not by size. `sizes` is each region's size in cells by id; sizes[0] is unused, so there are sizes.length - 1 regions. */
+    interface Regions {
+      ids: Raster<Int32Array>;
+      sizes: number[];
+    }
+
+    /** Step 5's measurements of one cluster. */
+    interface Measured {
+      /** Cells that survived the shrink. */
+      cellCount: number;
+      /** cellCount times the area of a cell, in square metres. */
+      area: number;
+      /** The mean of the centres of the cells carrying the cluster's id. */
+      centroid: Point;
+      /** Records whose first point lies in the cluster. */
+      records: number;
+      /** Separate days those records were made on. */
+      days: number;
+      /** The longest side of the box around those records' vertices. */
+      spanM: number;
+    }
+
+    /** A rectangle for the map to fill, in metres. */
+    interface Run {
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }
+
+    /** A side of a cell for the map to stroke. */
+    type Segment = [Point, Point];
+
+    /** The two cheaper forms of a shape that the map draws. */
+    interface Traces {
+      runs: Run[];
+      outline: Segment[];
+    }
+
+    /** What the map draws: each measured cluster with its traces, and the grown shape before shrinking. */
+    interface Shapes {
+      clusters: (Measured & Traces)[];
+      grown: Traces;
+    }
+
+    /** A cluster with its shapes and the verdict. `id` is its rank by records, 1 for the largest. */
+    interface Cluster extends Measured, Traces {
+      id: number;
+      kept: boolean;
+      /** Why it was dropped, in words; null when kept. */
+      reason: string | null;
+    }
+
+    interface Extent {
+      clusters: Cluster[];
+      /** The area of the kept clusters, in square metres. */
+      area: number;
+      grown: Traces;
+    }
+  </script>
+  <script id="3" type="text/markdown">
+    ## Imports
+
+    The grid and track simplification come from the [footprint](./footprint) notebook; scenarios and the map from the [scenarios](./scenarios) and [scenario map](./scenario-map) notebooks.
+  </script>
+  <script id="2" type="module" pinned="">
+    import {
+      scenarioCatalogue,
+      makeScenario,
+      buildRecords,
+      projectRecords
+    } from "observable:@gmaclennan/scenarios";
+    import {
+      scenarioMap,
+      applyStyle,
+      PALETTE,
+      PAPER
+    } from "observable:@gmaclennan/scenario-map";
+    import {
+      Grid,
+      WORD,
+      cellsOf,
+      simplifyLine
+    } from "observable:@gmaclennan/footprint";
+  </script>
+  <script id="27" type="module" pinned="">
+    const scenario = makeScenario(scenarioSpec, seed);
+    const started = performance.now();
+    const extent = extentOf(scenario, {
+      linkingKm,
+      marginM,
+      holeKm2,
+      cellSize,
+      strayKm,
+      impliedPaths
+    });
+    const elapsedMs = performance.now() - started;
+    const extentKm2 = extent.area / 1e6;
+    const keptClusters = extent.clusters.filter((cluster) => cluster.kept);
+    const recordCount = (kind) =>
+      extent.records.filter((record) => record.kind === kind).length;
+  </script>
+</notebook>

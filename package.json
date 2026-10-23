@@ -1,0 +1,107 @@
+{
+	"name": "@comapeo/area-metrics",
+	"version": "0.0.0",
+	"description": "Estimate the footprint and extent of CoMapeo observations and tracks: fast, low-memory area metrics for running on a phone.",
+	"keywords": [
+		"comapeo",
+		"area",
+		"footprint",
+		"extent",
+		"geospatial",
+		"metrics",
+		"typescript"
+	],
+	"license": "MIT",
+	"author": "Awana Digital",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/digidem/comapeo-area-metrics.git"
+	},
+	"homepage": "https://github.com/digidem/comapeo-area-metrics#readme",
+	"bugs": {
+		"url": "https://github.com/digidem/comapeo-area-metrics/issues"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=22"
+	},
+	"sideEffects": false,
+	"scripts": {
+		"build": "rimraf dist && tsc -p tsconfig.build.json",
+		"prepack": "npm run build",
+		"prepare": "husky",
+		"format": "prettier --write .",
+		"test": "run-s test:types test:lint test:unused test:unit",
+		"test:types": "tsc",
+		"test:lint": "eslint",
+		"test:unused": "knip",
+		"test:unit": "node --test \"test/**/*.test.ts\"",
+		"coverage": "c8 --reporter=lcov --reporter=text node --test \"test/**/*.test.ts\"",
+		"check:pkg": "npm run build && publint && attw --pack --profile esm-only",
+		"bench": "node bench/index.ts",
+		"notebooks:preview": "notebooks preview --root notebooks",
+		"notebooks:build": "notebooks build --root notebooks -- notebooks/footprint.html notebooks/extent.html notebooks/footprint-and-extent-side-by-side.html notebooks/alternatives.html notebooks/scenarios.html notebooks/scenario-map.html",
+		"notebooks:format": "node notebooks/scripts/format-notebook.mjs notebooks/footprint.html notebooks/extent.html notebooks/footprint-and-extent-side-by-side.html notebooks/alternatives.html",
+		"notebooks:check": "node notebooks/scripts/check-render.mjs notebooks/footprint.html notebooks/extent.html notebooks/footprint-and-extent-side-by-side.html notebooks/alternatives.html notebooks/scenarios.html notebooks/scenario-map.html",
+		"changeset": "changeset",
+		"release": "changeset publish"
+	},
+	"prettier": {
+		"semi": false,
+		"singleQuote": true,
+		"useTabs": true,
+		"importOrder": [
+			"^node:",
+			"<THIRD_PARTY_MODULES>",
+			"^[./]"
+		],
+		"importOrderSeparation": true,
+		"plugins": [
+			"@trivago/prettier-plugin-sort-imports"
+		],
+		"overrides": [
+			{
+				"files": "*.md",
+				"options": {
+					"useTabs": false
+				}
+			}
+		]
+	},
+	"lint-staged": {
+		"*.{js,mjs,cjs,ts,mts,cts}": "eslint --cache --fix",
+		"*": "prettier --write --ignore-unknown"
+	},
+	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.5",
+		"@changesets/changelog-github": "^1.0.1",
+		"@changesets/cli": "^3.0.3",
+		"@eslint/js": "^10.0.1",
+		"@observablehq/notebook-kit": "^2.7.0",
+		"@trivago/prettier-plugin-sort-imports": "^6.0.2",
+		"@types/node": "^22.20.5",
+		"c8": "^12.0.0",
+		"eslint": "^10.12.0",
+		"globals": "^17.13.0",
+		"husky": "^9.1.7",
+		"jsdom": "^30.0.1",
+		"knip": "^6.41.0",
+		"lint-staged": "^17.6.0",
+		"npm-run-all2": "^9.0.3",
+		"prettier": "^3.9.10",
+		"publint": "^0.3.25",
+		"rimraf": "^6.1.3",
+		"typescript": "~6.0",
+		"typescript-eslint": "^8.71.2"
+	}
+}
